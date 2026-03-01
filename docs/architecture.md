@@ -14,7 +14,8 @@ The rate limiter follows **Hexagonal Architecture** (ports and adapters), organi
 ├─────────────────────────────────────────────────┤
 │  core/domain        Pure Kotlin types             │
 │  (business)         RateLimitKey, BucketState,    │
-│                     RateLimitResult, Config        │
+│                     RateLimitDeniedException,      │
+│                     TokenBucketConfig              │
 ├─────────────────────────────────────────────────┤
 │  infra/             Implementations               │
 │  (tech detail)      SystemClock, InMemoryStore,   │
@@ -22,7 +23,7 @@ The rate limiter follows **Hexagonal Architecture** (ports and adapters), organi
 └─────────────────────────────────────────────────┘
 ```
 
-See [`diagrams/component.puml`](../diagrams/component.puml) for the full PlantUML component diagram.
+See [`diagrams/component.mmd`](../diagrams/component.mmd) for the Mermaid component diagram (renders natively on GitHub). The PlantUML sequence diagram is at [`diagrams/sequence-check.puml`](../diagrams/sequence-check.puml).
 
 ---
 
@@ -54,7 +55,7 @@ The HTTP layer uses **WebFlux Functional style** (not `@RestController`). This m
 
 - **Router** (`RateLimiterRouter.kt`): declares routes only — `coRouter { POST("/path", handler::fn) }`
 - **Handler** (`RateLimitHandler.kt`): validates request body, delegates to `RateLimiterPort`, throws on denial
-- **Exception Handler** (`RateLimitExceptionHandler.kt`): `@RestControllerAdvice` that maps `RateLimitExceededException` to 429 + `Retry-After` — keeps the handler free of HTTP status decisions
+- **Exception Handler** (`RateLimitExceptionHandler.kt`): `@RestControllerAdvice` that maps `RateLimitDeniedException` → 429 + `Retry-After` and `BadRequestException` → 400 — keeps the handler free of HTTP status decisions
 - **DTOs** (`RateLimitRequest`, `RateLimitResponse`): data classes at the HTTP boundary only
 
 The router is a `RouterFunction` bean — it can be tested with `WebTestClient.bindToRouterFunction()` (standalone, no server) or via `@SpringBootTest(RANDOM_PORT)` for full context including the exception handler.
