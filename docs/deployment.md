@@ -52,7 +52,7 @@ AWS EC2 t2.micro is **750 hours/month free for 12 months** — enough for contin
 
 - AMI: **Amazon Linux 2023** (free tier eligible)
 - Instance type: **t2.micro** (1 vCPU, 1 GB RAM)
-- Storage: 8 GB gp2 (default)
+- Storage: **20 GB gp3** (the default 8 GB fills up quickly once Docker images are cached; increase to 20 GB at no meaningful cost)
 - Key pair: create or select an existing `.pem` key
 
 ### 2. Security group rules
@@ -71,19 +71,32 @@ Restrict port 3000 to your IP in production — Grafana has no auth by default.
 # Connect to the instance
 ssh -i your-key.pem ec2-user@<public-ip>
 
-# Install Docker
-sudo dnf install -y docker
+# Install git and Docker
+sudo dnf install -y git docker
 sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker ec2-user   # allows running docker without sudo
 # Re-login for group change to take effect
 
-# Install Compose plugin
+# Install Compose plugin (includes a recent buildx — required >= 0.17.0)
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
 sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# Verify versions
+docker compose version   # must be >= 2.24.x
+docker buildx version    # must be >= v0.17.0
 ```
+
+> **Note:** `docker compose build` requires buildx ≥ 0.17.0. If you installed Docker from
+> the Amazon Linux repos earlier (before following this guide), your bundled buildx may be
+> older. Installing the Compose plugin from GitHub (as above) always ships a current buildx.
+
+> **Memory note:** The Gradle Kotlin build inside Docker uses ~512 MB at peak. On t2.micro
+> (1 GB total), the first `--build` may be slow; subsequent builds reuse the build cache and
+> are faster. If the build OOMs, stop the `grafana-lgtm` container first, rebuild, then
+> restart it.
 
 ### 4. Clone and run
 
@@ -102,7 +115,7 @@ docker compose logs -f app
 
 ```bash
 # From EC2 or your local machine (replace <public-ip>)
-curl -X POST https://<public-ip>:8080/api/rate-limit/check \
+curl -X POST http://<public-ip>:8080/api/rate-limit/check \
   -H 'Content-Type: application/json' \
   -d '{"key":"smoke-test"}'
 # → 200 {"allowed":true}
@@ -188,8 +201,7 @@ Configure these under **GitHub repo → Settings → Secrets and variables → A
 | `EC2_HOST` | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`) |
 | `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
 | `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
-| `EC2_HOST_FINGERPRINT` | SSH host key fingerprint of the EC2 instance (run `ssh-keyscan -t ed25519 <host>` to obtain a single known-hosts line) |
-| `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
+| `EC2_REPO_PATH` | Absolute path to the `sd-implementation-challenge/` directory on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
 
 ### Restart policy
 
@@ -198,6 +210,6 @@ Both services in `compose.yaml` include `restart: unless-stopped`. This ensures 
 ### Verify after deploy
 
 ```bash
-curl https://<ec2-ip>:8080/actuator/health
+curl http://<ec2-ip>:8080/actuator/health
 # → {"status":"UP"}
 ```

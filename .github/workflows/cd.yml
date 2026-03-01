@@ -25,36 +25,36 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
-            set -euo pipefail 2>/dev/null || set -euo
-            CLONE_DIR="${REPO_PATH%/}"
-            case "$CLONE_DIR" in
+            set -euo pipefail 2>/dev/null || set -e
+            # REPO_PATH points to sd-implementation-challenge/ — where compose.yaml lives
+            COMPOSE_DIR="${REPO_PATH%/}"
+            case "$COMPOSE_DIR" in
               "~"|"~/"*)
                 if [ -z "${HOME:-}" ]; then
-                  echo "HOME must be set when using ~ in REPO_PATH (got: '$CLONE_DIR')" >&2
-                  exit 1
+                  echo "HOME must be set when using ~ in REPO_PATH" >&2; exit 1
                 fi
-                CLONE_DIR="${HOME}${CLONE_DIR#\~}"
+                COMPOSE_DIR="${HOME}${COMPOSE_DIR#\~}"
                 ;;
               "~"*)
-                echo "~user paths are not supported in REPO_PATH (got: '$CLONE_DIR')" >&2
-                exit 1
+                echo "~user paths are not supported in REPO_PATH" >&2; exit 1
                 ;;
             esac
-            case "$CLONE_DIR" in
+            case "$COMPOSE_DIR" in
               /*) ;;
-              *) echo "REPO_PATH must resolve to an absolute path (got: '$CLONE_DIR')" >&2; exit 1 ;;
+              *) echo "REPO_PATH must resolve to an absolute path (got: '$COMPOSE_DIR')" >&2; exit 1 ;;
             esac
-            if [ ! -d "$CLONE_DIR/.git" ]; then
-              case "$CLONE_DIR" in
-                ""|"/"|"."|".."|"${HOME:-}"|"/home"|"/root")
-                  echo "Refusing to remove unsafe directory: '$CLONE_DIR'" >&2
-                  exit 1
-                  ;;
-              esac
-              rm -rf "$CLONE_DIR"
-              git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
+            # Git root is the PARENT of the compose directory
+            REPO_DIR="$(dirname "$COMPOSE_DIR")"
+            case "$REPO_DIR" in
+              ""|"/"|"."|".."|"${HOME:-}"|"/home"|"/root")
+                echo "Refusing to remove unsafe directory: '$REPO_DIR'" >&2; exit 1
+                ;;
+            esac
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              rm -rf "$REPO_DIR"
+              git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$REPO_DIR"
             fi
-            cd "$CLONE_DIR"
+            cd "$COMPOSE_DIR"
             git fetch origin master
             git checkout master
             git reset --hard origin/master
