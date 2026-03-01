@@ -23,9 +23,12 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          host_fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
           envs: REPO_PATH
           script: |
+            CLONE_DIR="$(dirname "$REPO_PATH")"
+            if [ ! -d "$CLONE_DIR/.git" ]; then
+              git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
+            fi
             cd "$REPO_PATH"
             git fetch origin master
             git checkout master
