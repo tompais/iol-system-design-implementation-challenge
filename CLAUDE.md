@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-This is a **System Design Implementation Challenge** — a working prototype of a **Rate Limiter** (Token Bucket algorithm), based on "System Design Interview Vol. 1" by Alex Xu. The challenge requires compiling code, passing tests, clean design, and documented trade-offs. See `CHALLENGE.md` and `PROMPT_CONTEXT.md` for scoring criteria.
+This is a **System Design Implementation Challenge** — a working prototype of a **Rate Limiter** (Token Bucket algorithm), based on "System Design Interview Vol. 1" by Alex Xu. The challenge requires compiling code, passing tests, clean design, and documented trade-offs. See `CHALLENGE.md` for scoring criteria.
 
 ## Engineering Principles (Non-Negotiable)
 

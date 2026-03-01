@@ -15,17 +15,20 @@ layers, never the reverse.**
 
 ```
 com.iol.ratelimiter/
-  core/domain/     ← pure Kotlin: RateLimitKey, BucketState, RateLimitResult, TokenBucketConfig
+  core/domain/     ← pure Kotlin: RateLimitKey, BucketState, RateLimitDeniedException, TokenBucketConfig
   core/port/       ← interfaces only: Clock, BucketStore, RateLimiterPort
   infra/           ← implementations: SystemClock, InMemoryBucketStore, TokenBucketRateLimiter
   adapter/api/
     errors/
-      exceptions/  ← RateLimitExceededException
+      exceptions/  ← BadRequestException
       handler/     ← RateLimitExceptionHandler (@RestControllerAdvice)
     handlers/      ← RateLimitHandler (suspend fun check)
     requests/      ← RateLimitRequest (DTO + validation)
     responses/     ← RateLimitResponse (DTO)
-    routing/       ← RateLimiterRouter (coRouter), RateLimiterRouterOperations (@RouterOperations)
+    routing/
+      routers/     ← RateLimiterRouter (coRouter)
+      routers/operations/annotations/ ← RateLimiterRouterOperations (@RouterOperations)
+    validation/    ← BodyValidator
   RateLimiterConfig.kt  ← @Configuration — only wiring point, no logic
 ```
 
@@ -97,7 +100,7 @@ Never skip the refactor step — that is where clean code is born.
 ### DDD — Domain-Driven Design (tactical patterns in use)
 
 - **Value Object**: `RateLimitKey` is a `@JvmInline value class` — identity is its value, not a reference
-- **Sealed class as domain result**: `RateLimitResult` (`Allowed` | `Denied`) makes illegal states unrepresentable
+- **Domain exception**: `RateLimitDeniedException` carries `retryAfterSeconds` — the port throws on denial instead of returning a result type; the adapter catches it in `RateLimitExceptionHandler`
 - **Ubiquitous language**: class and method names come from the domain (`tryConsume`, `BucketState`, `milliTokens`, `refillRatePerSecond`) — never from technical concerns (`doProcess`, `handleData`)
 - **Rich domain objects**: `BucketState` encapsulates token arithmetic; it is not a plain data bag
 - Domain objects live in `core/domain`. They depend on nothing outside that package.
@@ -109,7 +112,7 @@ Never skip the refactor step — that is where clean code is born.
 ```
      ┌──────────────────────────────────────┐
      │              core/domain              │  ← no dependencies
-     │  RateLimitKey · BucketState · Result  │
+     │  RateLimitKey · BucketState · Config   │
      └──────────────┬───────────────────────┘
                     │ used by
      ┌──────────────▼───────────────────────┐
@@ -120,7 +123,8 @@ Never skip the refactor step — that is where clean code is born.
    ┌────────▼──────────┐  ┌───────▼─────────────────────┐
    │       infra/      │  │       adapter/api/           │
    │ TokenBucketRate-  │  │  RateLimitHandler · Router  │
-   │   Limiter         │  │  RateLimitExceptionHandler   │
+   │   Limiter         │  │  BodyValidator               │
+   │                   │  │  RateLimitExceptionHandler   │
    │ InMemoryBucket-   │  └─────────────────────────────┘
    │   Store           │
    │ SystemClock       │
@@ -170,19 +174,24 @@ fun rateLimitRouter(handler: RateLimitHandler) = coRouter {
     POST("/api/rate-limit/check", handler::check)
 }
 
-// Handler: thin — validates, delegates, maps status
-class RateLimitHandler(private val rateLimiter: RateLimiterPort, private val validator: Validator) {
+// Handler: 5 lines of linear logic — validate, delegate, return 200
+class RateLimitHandler(private val rateLimiter: RateLimiterPort, private val bodyValidator: BodyValidator) {
     suspend fun check(request: ServerRequest): ServerResponse {
         val body = request.awaitBody<RateLimitRequest>()
-        // validate → delegate → on Denied: throw RateLimitExceededException
+        bodyValidator.validate(body)          // throws BadRequestException on violation
+        rateLimiter.tryConsume(RateLimitKey(body.key))  // throws RateLimitDeniedException on denial
+        return ServerResponse.ok().bodyValueAndAwait(RateLimitResponse(true))
     }
 }
 
-// Exception handler: all HTTP 429 mapping lives here, not in the handler
+// Exception handler: HTTP 429 / 400 mapping lives here, not in the handler
 @RestControllerAdvice
 class RateLimitExceptionHandler {
-    @ExceptionHandler(RateLimitExceededException::class)
-    fun handleRateLimitExceeded(ex: RateLimitExceededException): ResponseEntity<RateLimitResponse>
+    @ExceptionHandler(RateLimitDeniedException::class)
+    fun handleRateLimitDenied(ex: RateLimitDeniedException): ResponseEntity<RateLimitResponse>
+
+    @ExceptionHandler(BadRequestException::class)
+    fun handleBadRequest(ex: BadRequestException): ResponseEntity<List<String>>
 }
 ```
 
@@ -235,7 +244,9 @@ Known quirks:
 
 ## Code Style (Non-Negotiable)
 
-- No AI slop: no `@param`/`@return` javadoc on obvious getters, no comments that restate
+- **Use KDoc (`/** */`), never JavaDoc.** KDoc is the Kotlin standard. Omit `@param`/`@return`
+  tags on self-documenting methods — they add noise, not value.
+- No AI slop: no `@param`/`@return` on obvious getters, no comments that restate
   the code. Add a comment only when the WHY is not obvious from the names.
 - No overengineering: solve what is asked, not what might be asked later. Three similar
   lines is better than a premature abstraction.
@@ -255,7 +266,7 @@ composed annotation on the `@Bean` method in `RateLimiterConfig`:
 fun rateLimitRouter(handler: RateLimitHandler) = buildRateLimitRouter(handler)
 ```
 
-`RateLimiterRouterOperations.kt` in `adapter/api/routing/` is the reference implementation.
+`RateLimiterRouterOperations.kt` in `adapter/api/routing/routers/operations/annotations/` is the reference implementation.
 
 ---
 
