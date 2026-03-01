@@ -36,6 +36,117 @@ com.iol.ratelimiter/
 
 ---
 
+## Engineering Principles & Methodology
+
+### TDD — Test-Driven Development (mandatory)
+
+Every change follows **Red → Green → Refactor**:
+
+1. **Red**: write a failing test that describes the desired behaviour
+2. **Green**: write the minimum production code to make it pass
+3. **Refactor**: clean up without changing behaviour, keeping tests green
+
+**Order of tests:**
+- Core logic unit tests (no Spring, stub `Clock`) before the implementation
+- Integration tests (`@SpringBootTest`) before edge-case unit tests
+- Concurrency tests (`@RepeatedTest` + `CountDownLatch`) to validate thread safety
+
+Never write production code without a failing test that justifies it.
+Never skip the refactor step — that is where clean code is born.
+
+---
+
+### SOLID
+
+| Principle | How it applies here |
+|---|---|
+| **S** — Single Responsibility | Each class has exactly one reason to change. `RateLimitHandler` maps HTTP. `TokenBucketRateLimiter` runs the algorithm. `RateLimiterConfig` wires beans. Never mix these. |
+| **O** — Open/Closed | Add behaviour by creating new implementations of `RateLimiterPort` or `BucketStore`, not by modifying existing ones. |
+| **L** — Liskov Substitution | Any `BucketStore` implementation must honour the contract defined by the port. `InMemoryBucketStore` is replaceable without changing `TokenBucketRateLimiter`. |
+| **I** — Interface Segregation | `Clock`, `BucketStore`, and `RateLimiterPort` are intentionally small and focused. Do not add methods to a port that only one consumer needs. |
+| **D** — Dependency Inversion | `core/` depends on abstractions (its own port interfaces). `infra/` depends on `core/port`. No layer depends on a concrete class from an outer layer. |
+
+---
+
+### DRY — Don't Repeat Yourself
+
+- Extract a concept only when it appears **three or more times** with the same intent
+- Do not create helpers or utilities for one-time operations
+- Shared logic belongs in the domain or a port, not in a utility class
+
+---
+
+### KISS — Keep It Simple, Stupid
+
+- The simplest solution that makes the tests pass is the right solution
+- Prefer explicit code over clever abstractions
+- Avoid nested lambdas, operator overloading, or DSL construction unless the codebase already uses them
+- If you need a comment to explain what the code does, the code is not simple enough
+
+---
+
+### YAGNI — You Aren't Gonna Need It
+
+- Do not implement features that are not explicitly required
+- No feature flags, no configuration options "just in case", no backwards-compatibility shims
+- Do not design for hypothetical future requirements — solve what is asked, not what might be asked later
+- Three similar lines of code is better than a premature abstraction
+
+---
+
+### DDD — Domain-Driven Design (tactical patterns in use)
+
+- **Value Object**: `RateLimitKey` is a `@JvmInline value class` — identity is its value, not a reference
+- **Sealed class as domain result**: `RateLimitResult` (`Allowed` | `Denied`) makes illegal states unrepresentable
+- **Ubiquitous language**: class and method names come from the domain (`tryConsume`, `BucketState`, `milliTokens`, `refillRatePerSecond`) — never from technical concerns (`doProcess`, `handleData`)
+- **Rich domain objects**: `BucketState` encapsulates token arithmetic; it is not a plain data bag
+- Domain objects live in `core/domain`. They depend on nothing outside that package.
+
+---
+
+### Hexagonal Architecture — The Dependency Rule
+
+```
+     ┌──────────────────────────────────────┐
+     │              core/domain              │  ← no dependencies
+     │  RateLimitKey · BucketState · Result  │
+     └──────────────┬───────────────────────┘
+                    │ used by
+     ┌──────────────▼───────────────────────┐
+     │              core/port                │  ← depends only on domain
+     │  Clock · BucketStore · RateLimiterPort│
+     └──────┬─────────────────────┬─────────┘
+            │ implemented by      │ used by
+   ┌────────▼──────────┐  ┌───────▼─────────────────────┐
+   │       infra/      │  │       adapter/api/           │
+   │ TokenBucketRate-  │  │  RateLimitHandler · Router  │
+   │   Limiter         │  │  RateLimitExceptionHandler   │
+   │ InMemoryBucket-   │  └─────────────────────────────┘
+   │   Store           │
+   │ SystemClock       │
+   └───────────────────┘
+```
+
+- `core/` must compile with zero Spring/Jakarta imports — enforced by a PreToolUse hook
+- `infra/` has no `@Component` or `@Autowired` — all wiring is explicit in `RateLimiterConfig`
+- The adapter knows about ports; it does NOT know about `infra/` concrete classes
+
+---
+
+### Clean Code
+
+- **Names**: classes, functions, and variables must read like prose. No abbreviations, no
+  single-letter variables outside of well-known idioms (`i` in a loop, `e` in a catch)
+- **Function size**: a function that doesn't fit on a screen is doing too much
+- **Comments**: only the **WHY**, never the **WHAT**. If the code needs a comment to explain
+  what it does, rename or refactor until it doesn't
+- **No dead code**: remove unused variables, functions, and imports immediately
+- **No commented-out code**: use git history instead
+- **No boilerplate KDoc**: no `@param`/`@return` on self-documenting methods. No docstrings
+  that restate the class name
+
+---
+
 ## Algorithm
 
 **Token Bucket with lazy refill and CAS-based thread safety.**
