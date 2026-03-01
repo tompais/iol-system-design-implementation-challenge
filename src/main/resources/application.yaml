@@ -1,6 +1,10 @@
 spring:
   application:
     name: sd-implementation-challenge
+  otel:
+    tracing:
+      sampling:
+        probability: 1.0
 
 springdoc:
   swagger-ui:
@@ -13,3 +17,13 @@ springdoc:
 rate-limiter:
   capacity: 10
   refill-rate-per-second: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+
