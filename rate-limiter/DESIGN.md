@@ -6,7 +6,7 @@
 
 The two main candidates were Token Bucket and Sliding Window Counter. Token Bucket was chosen because it models real-world bursty traffic naturally — tokens accumulate during quiet periods and drain during bursts — which matches production API behavior. A client that is quiet for 2 seconds earns 2× capacity tokens (capped), allowing a legitimate burst, rather than being penalized for the previous window's inactivity. Sliding Window Counter requires a ring buffer or sorted set of timestamps per key and needs a background sweep for cleanup, adding operational complexity with no benefit for this use case. Fixed Window Counter has a well-known boundary exploit (2× burst at window edges) that makes it unsuitable for rate limiting.
 
-**Lazy refill vs. scheduled background thread:** Refill is computed on each `tryConsume()` call by comparing the current timestamp to the `lastRefillAt` timestamp stored in `BucketState`. `earned = refillRatePerSecond × elapsedMs` (units cancel: tokens/sec × ms = milliTokens). This eliminates the need for a background scheduler thread entirely — no goroutines, no timers, no coordination overhead, just arithmetic on each request. The trade-off is that a burst of concurrent requests all compute the same refill amount simultaneously; this is correct because the CAS loop serialises which write wins.
+**Lazy refill vs. scheduled background thread:** Refill is computed on each `tryConsume()` call by comparing the current timestamp to the `lastRefillAt` timestamp stored in `BucketState`. `earned = min(refillRatePerSecond × elapsedMs, capacity × 1000)` (units cancel: tokens/sec × ms = milliTokens). The cap on `earned` prevents Long overflow and unexpectedly huge balances if the clock jumps far forward. `elapsedMs` is itself guarded with `maxOf(0L, ...)` so a backward clock step never produces negative earned tokens. This eliminates the need for a background scheduler thread entirely — no goroutines, no timers, no coordination overhead, just arithmetic on each request. The trade-off is that a burst of concurrent requests all compute the same refill amount simultaneously; this is correct because the CAS loop serialises which write wins.
 
 ---
 
@@ -28,7 +28,7 @@ The two main candidates were Token Bucket and Sliding Window Counter. Token Buck
 
 **`retryAfterSeconds` ceiling division:** The denied response carries a `Retry-After` header value computed as: `ceil(ceil(missingMilliTokens / refillRatePerSecond) / 1000)`. Two nested ceiling divisions convert milliTokens → milliseconds → seconds. For integer refill rates ≥ 1 token/sec, this always returns ≥ 1 second, preventing the pathological `Retry-After: 0` case.
 
-**Clock injection (`Clock` fun interface):** The `Clock` abstraction allows tests to control time precisely — advance by exactly 200ms to verify one-token refill, freeze time to test bucket exhaustion, check sub-token partial refill at 100ms and 199ms. Without this, tests would be flaky (real-time dependent) or require `Thread.sleep()` (slow). `SystemClock` is a Kotlin `object` (singleton) with zero allocation overhead. The `fun interface` (SAM) allows stubs as lambdas: `Clock { fixedTime }`.
+**Clock injection (`Clock` fun interface):** The `Clock` abstraction allows tests to control time precisely — advance by exactly 200ms to verify one-token refill, freeze time to test bucket exhaustion, check sub-token partial refill at 100ms and 199ms. Without this, tests would be flaky (real-time dependent) or require `Thread.sleep()` (slow). `SystemClock` is a Kotlin `object` (singleton) that delegates to `System.nanoTime() / 1_000_000` rather than `System.currentTimeMillis()`. `nanoTime` is monotonic — it never steps backward and is unaffected by NTP wall-clock adjustments (e.g. EC2 chrony corrections on boot). The `fun interface` (SAM) allows stubs as lambdas in tests: `Clock { fixedTime }`.
 
 **Hexagonal architecture (ports and adapters):** `core/domain` and `core/port` have zero Spring/Jakarta imports — they compile and test with no framework on the classpath. All framework code lives in `infra/` (implementations) and `adapter/` (HTTP layer). A single `RateLimiterConfig` `@Configuration` class wires the dependency graph at the edge. No `@Component` or `@Autowired` annotations exist inside `infra/` or `adapter/` — explicit constructor injection makes the wiring visible and testable.
 
@@ -48,7 +48,7 @@ The two main candidates were Token Bucket and Sliding Window Counter. Token Buck
 | Config | Spring `@Value` + `application.yaml` | Config server / hot reload |
 | HTTP error mapping | `@RestControllerAdvice` + custom exception | `when` expression inline in handler |
 | Request validation | Spring `Validator` injected into handler | Jakarta Validation filter / MVC binding |
-| Algorithm | Token Bucket | Sliding Window Log, Leaky Bucket |
+| Clock source | `System.nanoTime()` (monotonic) | `System.currentTimeMillis()` (wall-clock, non-monotonic) |
 
 **What this prototype does NOT do:** Distributed state (all state is per-JVM instance), persistent storage across restarts, key expiry/eviction, per-user config overrides, or metrics per key. Swapping `InMemoryBucketStore` for a Redis-backed implementation would require the CAS loop to become a Lua script or `WATCH`/`MULTI`/`EXEC` Redis transaction — the `BucketStore` port is designed for exactly this swap.
 
