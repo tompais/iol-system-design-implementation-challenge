@@ -1,16 +1,24 @@
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.spring") version "2.2.21"
-    id("org.springframework.boot") version "4.0.3"
-    id("io.spring.dependency-management") version "1.1.7"
-    id("org.jlleitschuh.gradle.ktlint") version "12.2.0"
-    id("dev.detekt") version "2.0.0-alpha.1"
+    kotlin("jvm")
+    kotlin("plugin.spring")
+    id("org.springframework.boot")
+    id("io.spring.dependency-management")
+    id("org.jlleitschuh.gradle.ktlint")
+    id("dev.detekt")
     id("jacoco")
 }
 
 group = "com.iol"
 version = "0.0.1-SNAPSHOT"
 description = "sd-implementation-challenge"
+
+val springCloudVersion: String by project
+val springDocVersion: String by project
+val assertkVersion: String by project
+val restAssuredVersion: String by project
+val springmockkVersion: String by project
+val jacocoToolVersion: String by project
+val ktlintVersion: String by project
 
 java {
     toolchain {
@@ -22,19 +30,25 @@ configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
     }
+    // spring-boot-starter-logging (Logback) conflicts with our Log4j2 setup:
+    //   - log4j-to-slf4j (from starter-logging) routes Log4j2 API → SLF4J
+    //   - log4j-slf4j2-impl (from starter-log4j2) routes SLF4J → Log4j2
+    // Both on classpath creates a cycle. Exclude the entire logging starter + its artifacts.
+    all {
+        exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")
+        exclude(group = "ch.qos.logback")
+        exclude(group = "org.apache.logging.log4j", module = "log4j-to-slf4j")
+    }
 }
 
 repositories {
     mavenCentral()
 }
 
-extra["springCloudVersion"] = "2025.1.0"
-
-val springDocVersion: String by project
-
 dependencies {
     implementation("org.springframework.boot:spring-boot-micrometer-tracing-brave")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-log4j2")
     implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
@@ -53,13 +67,15 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
-    testImplementation("com.ninja-squad:springmockk:4.0.2")
+    testImplementation("com.ninja-squad:springmockk:$springmockkVersion")
+    testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
+    testImplementation("io.rest-assured:spring-web-test-client:$restAssuredVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}")
+        mavenBom("org.springframework.cloud:spring-cloud-dependencies:$springCloudVersion")
     }
 }
 
@@ -82,7 +98,7 @@ configurations.matching { it.name.startsWith("detekt") }.all {
 
 ktlint {
     // ktlint 1.5+ uses the updated Kotlin AST API compatible with Kotlin 2.2.x (EXPECT_KEYWORD replaces HEADER_KEYWORD)
-    version = "1.5.0"
+    version = ktlintVersion
 }
 
 detekt {
@@ -92,7 +108,7 @@ detekt {
 
 jacoco {
     // 0.8.13 adds Java 24 (class file version 68) support
-    toolVersion = "0.8.13"
+    toolVersion = jacocoToolVersion
 }
 
 tasks.test {
