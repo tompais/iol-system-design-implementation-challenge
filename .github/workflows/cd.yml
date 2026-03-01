@@ -25,10 +25,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
-            set -eu
-            CLONE_DIR="$(dirname "$REPO_PATH")"
+            set -euo pipefail
+            CLONE_DIR="$REPO_PATH"
             if [ ! -d "$CLONE_DIR/.git" ]; then
-              [ -n "$CLONE_DIR" ] && [ "$CLONE_DIR" != "/" ] || { echo "Error: CLONE_DIR is empty or unsafe: '$CLONE_DIR'" >&2; exit 1; }
+              case "$CLONE_DIR" in
+                ""|"/"|"."|".."|"$HOME"|"/home"|"/root")
+                  echo "Refusing to remove unsafe directory: '$CLONE_DIR'" >&2
+                  exit 1
+                  ;;
+              esac
               rm -rf "$CLONE_DIR"
               git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
             fi
