@@ -13,7 +13,7 @@ Files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`
 | `<Name>Request.kt` | `adapter/api/requests/` → `...adapter.api.requests` |
 | `<Name>Response.kt` | `adapter/api/responses/` → `...adapter.api.responses` |
 | `<Name>Handler.kt` | `adapter/api/handlers/` → `...adapter.api.handlers` |
-| `<Name>ExceededException.kt` | `adapter/api/errors/exceptions/` → `...adapter.api.errors.exceptions` |
+| `<Name>DeniedException.kt` | `core/domain/` → `...core.domain` |
 | Exception handler entry | `adapter/api/errors/handler/RateLimitExceptionHandler.kt` |
 | `<Name>Router.kt` | `adapter/api/routing/routers/` → `...adapter.api.routing.routers` |
 | `<Name>RouterOperations.kt` | `adapter/api/routing/routers/operations/annotations/` → `...routing.routers.operations.annotations` |
@@ -79,7 +79,7 @@ class <Name>Handler(
     suspend fun <verb>(request: ServerRequest): ServerResponse {
         val body = request.awaitBody<<Name>Request>()
         bodyValidator.validate(body)                       // throws BadRequestException → 400
-        rateLimiter.tryConsume(RateLimitKey(body.key))     // throws domain exception → @RestControllerAdvice
+        rateLimiter.tryConsume(RateLimitKey(body.key))     // throws RateLimitDeniedException → @RestControllerAdvice
         return ServerResponse.ok().bodyValueAndAwait(<Name>Response(allowed = true))
     }
 }
@@ -133,13 +133,15 @@ Domain exceptions are pure Kotlin — no Spring imports. This keeps `core/domain
 ### Exception handler entry (add to the existing `RateLimitExceptionHandler`)
 
 ```kotlin
-@ExceptionHandler(<Name>DeniedException::class)
-fun handle<Name>Denied(ex: <Name>DeniedException): ResponseEntity<<Name>Response> =
+@ExceptionHandler(RateLimitDeniedException::class)
+fun handle<Name>Denied(ex: RateLimitDeniedException): ResponseEntity<<Name>Response> =
     ResponseEntity
         .status(HttpStatus.TOO_MANY_REQUESTS)
         .header("Retry-After", ex.retryAfterSeconds.toString())
         .body(<Name>Response(false))
 ```
+
+> **Building a genuinely new domain operation?** Define `<Name>DeniedException` in `core/domain/` (pure Kotlin `RuntimeException`, no Spring), throw it from your domain service, and add a matching `@ExceptionHandler` entry above — following the same pattern as `RateLimitDeniedException`.
 
 **Why this pattern?**
 - The handler stays truly thin — it never decides the HTTP shape of an error response

@@ -39,7 +39,7 @@ class RateLimitHandler(
 }
 ```
 
-**Handler rules**: handlers know which service to call, which HTTP status to return, and how to resolve the route. They contain NO business logic. Validation lives in `BodyValidator`; error-to-HTTP mapping lives in `RateLimitExceptionHandler`.
+**Handler rules**: handlers know which service to call and how to resolve the route; on the success path they always return 200 OK and let exceptions bubble. They contain NO business logic. Validation lives in `BodyValidator`; error-to-HTTP mapping (including non-200 statuses) lives in `RateLimitExceptionHandler`.
 
 ## Build & Development Commands
 
