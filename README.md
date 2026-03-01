@@ -131,6 +131,22 @@ See [`docs/testing.md`](docs/testing.md) for the full TDD approach and test pyra
 
 ---
 
+## Live Demo
+
+A [k6](https://k6.io) script exercises the rate limiter end-to-end: single request, bucket exhaustion, validation errors (missing key, blank key), and 100-VU concurrency burst.
+
+```bash
+# 1. Start the app
+docker compose up
+
+# 2. Run the demo (requires k6)
+k6 run demo/rate-limiter-demo.js
+```
+
+See [`demo/README.md`](demo/README.md) for details on all 5 scenarios and expected output.
+
+---
+
 ## Design Document
 
 [`rate-limiter/DESIGN.md`](rate-limiter/DESIGN.md) — required submission artifact. Covers algorithm choice, thread-safety model, key design decisions, trade-offs, and AI usage.
