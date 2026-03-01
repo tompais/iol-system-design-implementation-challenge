@@ -1,0 +1,36 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [master]
+    types: [completed]
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@25ce8cbbcb08177468c7ff7ec5cbfa236f9341e1 # v1.1.0
+        env:
+          REPO_PATH: ${{ secrets.EC2_REPO_PATH }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: REPO_PATH
+          script: |
+            CLONE_DIR="$(dirname "$REPO_PATH")"
+            if [ ! -d "$CLONE_DIR/.git" ]; then
+              git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
+            fi
+            cd "$REPO_PATH"
+            git fetch origin master
+            git checkout master
+            git reset --hard origin/master
+            docker compose up --build -d app
