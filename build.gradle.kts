@@ -7,6 +7,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     id("org.springframework.cloud.contract") version "5.0.0"
     id("org.asciidoctor.jvm.convert") version "4.0.5"
+    id("dev.detekt") version "2.0.0-alpha.2"
 }
 
 group = "com.iol"
@@ -32,6 +33,8 @@ repositories {
 extra["snippetsDir"] = file("build/generated-snippets")
 extra["springCloudVersion"] = "2025.1.0"
 
+val springDocVersion: String by project
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-micrometer-tracing-brave")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -42,7 +45,7 @@ dependencies {
     implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
-    implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.1")
+    implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:$springDocVersion")
     implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j")
     implementation("tools.jackson.module:jackson-module-kotlin")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
