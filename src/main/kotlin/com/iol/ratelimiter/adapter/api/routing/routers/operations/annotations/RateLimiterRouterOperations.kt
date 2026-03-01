@@ -1,4 +1,4 @@
-package com.iol.ratelimiter.adapter.api.routing
+package com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations
 
 import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
 import com.iol.ratelimiter.adapter.api.requests.RateLimitRequest
