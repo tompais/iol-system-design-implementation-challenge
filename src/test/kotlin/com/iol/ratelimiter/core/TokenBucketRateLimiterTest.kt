@@ -151,4 +151,40 @@ class TokenBucketRateLimiterTest {
         // At 5 tokens/sec, 1 token takes 200ms = 0.2 sec → ceiling = 1
         assertThat(denied.retryAfterSeconds).isEqualTo(1L)
     }
+
+    @Test
+    @DisplayName("large forward clock jump does not overflow — bucket refills to at most capacity")
+    fun `large forward clock jump caps refill at capacity`() {
+        var clockNow = 0L
+        val cfg = TokenBucketConfig(capacity = 5L, refillRatePerSecond = 1L)
+        val fwdLimiter = TokenBucketRateLimiter(cfg, InMemoryBucketStore(), Clock { clockNow })
+        val key = RateLimitKey("fwd-jump-test")
+
+        repeat(5) { assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
+        assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+
+        // Jump forward by years — bucket must refill to exactly capacity, not overflow
+        clockNow = Long.MAX_VALUE / 2
+        repeat(5) { assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
+        assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+    }
+
+    @Test
+    @DisplayName("clock regression does not reduce token balance")
+    fun `clock regression does not reduce token balance`() {
+        var clockNow = 1000L
+        val cfg = TokenBucketConfig(capacity = 5L, refillRatePerSecond = 1L)
+        val regLimiter = TokenBucketRateLimiter(cfg, InMemoryBucketStore(), Clock { clockNow })
+        val key = RateLimitKey("regression-test")
+
+        repeat(3) { assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
+
+        // Clock steps backward by 500ms (NTP correction)
+        clockNow = 500L
+
+        // 2 tokens remain; regression must not destroy them
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+    }
 }
