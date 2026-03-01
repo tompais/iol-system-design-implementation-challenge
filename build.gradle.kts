@@ -104,6 +104,7 @@ ktlint {
 detekt {
     buildUponDefaultConfig = true
     allRules = false
+    config.setFrom("detekt.yml")
 }
 
 jacoco {
