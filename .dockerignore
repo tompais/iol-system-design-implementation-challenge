@@ -1,0 +1,28 @@
+# Gradle build outputs and caches — rebuilt inside the builder stage
+.gradle/
+build/
+
+# Version control — not needed in build context
+.git/
+.gitignore
+
+# Claude Code — IDE tooling, not app code
+.claude/
+
+# Documentation and diagrams — not needed for compilation
+*.md
+diagrams/
+docs/
+rate-limiter/
+
+# Local observability data
+.loki/
+
+# PlantUML source files
+*.puml
+
+# Docker files themselves — avoids circular inclusion issues
+Dockerfile
+.dockerignore
+docker-compose*.yml
+compose.yaml

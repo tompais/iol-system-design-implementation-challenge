@@ -62,6 +62,24 @@ com.iol.ratelimiter/
 
 ---
 
+## Docker
+
+Start the app + full observability stack with one command:
+
+```bash
+docker compose up
+```
+
+| Service | URL |
+|---------|-----|
+| App | http://localhost:8080 |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
+
+See [`docs/deployment.md`](docs/deployment.md) for AWS EC2 free-tier deployment instructions.
+
+---
+
 ## Quality Gates
 
 All gates are enforced by `./gradlew build` via `tasks.check`:
