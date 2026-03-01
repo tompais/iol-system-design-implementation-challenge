@@ -6,7 +6,16 @@ Scaffold a complete WebFlux Functional endpoint following the project's thin-han
 
 ## Package Location
 
-All files go in: `src/main/kotlin/com/iol/ratelimiter/adapter/api/`
+Files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
+
+| File | Sub-package |
+|------|-------------|
+| `<Name>Request.kt` | `adapter/api/requests/` → `...adapter.api.requests` |
+| `<Name>Response.kt` | `adapter/api/responses/` → `...adapter.api.responses` |
+| `<Name>Handler.kt` | `adapter/api/handlers/` → `...adapter.api.handlers` |
+| `<Name>ExceededException.kt` | `adapter/api/errors/exceptions/` → `...adapter.api.errors.exceptions` |
+| Exception handler entry | `adapter/api/errors/handler/RateLimitExceptionHandler.kt` |
+| `<Name>Router.kt` + `<Name>RouterOperations.kt` | `adapter/api/routing/` → `...adapter.api.routing` |
 
 ---
 
@@ -15,7 +24,7 @@ All files go in: `src/main/kotlin/com/iol/ratelimiter/adapter/api/`
 ### 1. `<Name>Request.kt` — Request DTO
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.requests
 
 import jakarta.validation.constraints.NotBlank
 
@@ -35,7 +44,7 @@ data class <Name>Request(
 ### 2. `<Name>Response.kt` — Response DTO
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.responses
 
 data class <Name>Response(
     val allowed: Boolean,
@@ -50,8 +59,11 @@ Keep response DTOs flat — no nested objects unless the API contract requires i
 ### 3. `<Name>Handler.kt` — Thin Handler
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.handlers
 
+import com.iol.ratelimiter.adapter.api.errors.exceptions.<Name>ExceededException
+import com.iol.ratelimiter.adapter.api.requests.<Name>Request
+import com.iol.ratelimiter.adapter.api.responses.<Name>Response
 import com.iol.ratelimiter.core.domain.RateLimitKey
 import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.port.RateLimiterPort
@@ -116,14 +128,18 @@ fun rateLimitRouter(
 ### `<Name>ExceededException.kt`
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.errors.exceptions
 
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 
 class <Name>ExceededException(
     val retryAfterSeconds: Long,
-) : ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS)
+) : ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS) {
+    companion object {
+        private const val serialVersionUID = 1L
+    }
+}
 ```
 
 ### `<Name>ExceptionHandler.kt` (or add to the existing `RateLimitExceptionHandler`)
@@ -152,7 +168,7 @@ Use the composed-annotation pattern — one annotation per router, placed on the
 ### `<Name>RouterOperations.kt`
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.routing
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -232,5 +248,5 @@ fun rateLimitRouter(
 - [ ] Router entry added to `RateLimiterRouter.kt`
 - [ ] `<Name>RouterOperations.kt` composed annotation + placed on `@Bean` in config
 - [ ] Bean registered in `RateLimiterConfig.kt`
-- [ ] Handler test added in `adapter/api/<Name>HandlerTest.kt` using `WebTestClient` + `@MockkBean`
+- [ ] Handler test added in `adapter/api/<Name>HandlerTest.kt` (package `com.iol.ratelimiter.adapter.api`) using `WebTestClient` + `@MockkBean`
 - [ ] `./gradlew build` passes

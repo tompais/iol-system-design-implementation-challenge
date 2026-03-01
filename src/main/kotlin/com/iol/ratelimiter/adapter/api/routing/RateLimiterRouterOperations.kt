@@ -1,5 +1,8 @@
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.routing
 
+import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
+import com.iol.ratelimiter.adapter.api.requests.RateLimitRequest
+import com.iol.ratelimiter.adapter.api.responses.RateLimitResponse
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema

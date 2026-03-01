@@ -1,4 +1,4 @@
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.requests
 
 import jakarta.validation.constraints.NotBlank
 
