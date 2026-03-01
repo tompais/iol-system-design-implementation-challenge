@@ -47,10 +47,32 @@ The two main candidates were Token Bucket and Sliding Window Counter. Token Buck
 | Token precision | `milliTokens` Long (exact integer CAS) | `Double` (IEEE 754 unreliable for CAS) |
 | Config | Spring `@Value` + `application.yaml` | Config server / hot reload |
 | HTTP error mapping | `@RestControllerAdvice` + custom exception | `when` expression inline in handler |
-| Request validation | Spring `Validator` injected into handler | Jakarta Validation filter / MVC binding |
+| Request validation | `BodyValidator` throws `BadRequestException` | Jakarta Validation filter / MVC binding |
 | Clock source | `System.nanoTime()` (monotonic) | `System.currentTimeMillis()` (wall-clock, non-monotonic) |
 
-**What this prototype does NOT do:** Distributed state (all state is per-JVM instance), persistent storage across restarts, key expiry/eviction, per-user config overrides, or metrics per key. Swapping `InMemoryBucketStore` for a Redis-backed implementation would require the CAS loop to become a Lua script or `WATCH`/`MULTI`/`EXEC` Redis transaction — the `BucketStore` port is designed for exactly this swap.
+### Storage: In-Memory vs Redis
+
+**Why in-memory is the right choice for this challenge.** This prototype runs on a single EC2 t2.micro instance (1 vCPU, 1 GB RAM). With a single JVM process, `ConcurrentHashMap<RateLimitKey, AtomicReference<BucketState>>` in `InMemoryBucketStore` is strictly sufficient: there is no cross-process state to share, no network round-trip on every request, and no serialization cost. The lock-free CAS loop in `TokenBucketRateLimiter` operates entirely in CPU L2 cache, which cannot be achieved with an external store. For a simulation or prototype, in-memory is the correct scope.
+
+**Why Redis would be required in production.** The moment the API runs on more than one instance (load-balanced, auto-scaled, or multi-region), each JVM holds an independent `ConcurrentHashMap`. Two instances serving the same `RateLimitKey` apply independent token budgets — effectively multiplying the allowed rate by the instance count. This defeats the purpose of rate limiting. Redis (or any shared external store) solves this by centralising state so all instances read and write the same bucket.
+
+**Why adding Redis is non-trivial here.** The `BucketStore` port contract returns `AtomicReference<BucketState>`:
+
+```kotlin
+fun interface BucketStore {
+    fun getOrCreate(key: RateLimitKey, initial: () -> BucketState): AtomicReference<BucketState>
+}
+```
+
+`AtomicReference` is a JVM in-process primitive — it has no meaning in Redis. A Redis-backed implementation cannot implement this interface as-is. A real migration would require:
+
+1. **Port redesign**: replace `AtomicReference<BucketState>` with an abstraction that can cross a network boundary (e.g., `suspend fun tryConsumeAtomically(key, update): Boolean`).
+2. **Atomic Redis operation**: the CAS loop must become a **Lua script** executed via `EVAL` (Lua runs atomically inside Redis, preventing the same TOCTOU race). A `WATCH`/`MULTI`/`EXEC` transaction is an alternative but adds round-trips.
+3. **Serialization**: `BucketState` (two `Long` fields) must be encoded into Redis (hash fields or a single packed string) and decoded on every call.
+4. **TTL / eviction**: `ConcurrentHashMap` grows indefinitely for inactive keys. Redis would add `EXPIRE` per key to evict stale buckets, which has no equivalent in the current design.
+5. **Test infrastructure**: unit tests using a fake `Clock` would need `Testcontainers` + a real Redis instance for integration-level testing of the Lua script.
+
+**What this prototype does NOT do:** Distributed state (all state is per-JVM instance), persistent storage across restarts, key expiry/eviction, per-user config overrides, or metrics per key. These are intentional omissions — the challenge asks for a working prototype that demonstrates the algorithm and thread-safety model, not a production distributed system.
 
 ---
 
