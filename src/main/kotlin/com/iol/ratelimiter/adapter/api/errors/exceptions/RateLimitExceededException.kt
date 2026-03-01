@@ -1,10 +1,10 @@
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.errors.exceptions
 
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 
 /**
- * Thrown by [RateLimitHandler] when the rate limiter denies a request.
+ * Thrown by [com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler] when the rate limiter denies a request.
  *
  * Wraps [ResponseStatusException] (429 Too Many Requests) so Spring's exception handling
  * infrastructure maps it to the correct HTTP response without any conditional logic in the handler.
@@ -12,4 +12,8 @@ import org.springframework.web.server.ResponseStatusException
  */
 class RateLimitExceededException(
     val retryAfterSeconds: Long,
-) : ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS)
+) : ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS) {
+    companion object {
+        private const val serialVersionUID = 1L
+    }
+}

@@ -1,5 +1,8 @@
-package com.iol.ratelimiter.adapter.api
+package com.iol.ratelimiter.adapter.api.handlers
 
+import com.iol.ratelimiter.adapter.api.errors.exceptions.RateLimitExceededException
+import com.iol.ratelimiter.adapter.api.requests.RateLimitRequest
+import com.iol.ratelimiter.adapter.api.responses.RateLimitResponse
 import com.iol.ratelimiter.core.domain.RateLimitKey
 import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.port.RateLimiterPort
@@ -15,7 +18,7 @@ import org.springframework.web.reactive.function.server.bodyValueAndAwait
  *
  * Validates the request body, delegates to [RateLimiterPort], and returns 200 on success.
  * On denial, throws [RateLimitExceededException] — the HTTP 429 mapping and `Retry-After`
- * header are handled by [RateLimitExceptionHandler], keeping this class free of conditional
+ * header are handled by the exception handler, keeping this class free of conditional
  * response-building logic.
  */
 class RateLimitHandler(
