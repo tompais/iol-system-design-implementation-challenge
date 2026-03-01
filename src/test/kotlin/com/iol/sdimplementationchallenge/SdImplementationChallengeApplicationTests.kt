@@ -1,6 +1,5 @@
 package com.iol.sdimplementationchallenge
 
-import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -50,6 +49,6 @@ class SdImplementationChallengeApplicationTests {
             .isOk
             .expectBody()
             .jsonPath("$.allowed")
-            .value(equalTo(true))
+            .isEqualTo(true)
     }
 }
