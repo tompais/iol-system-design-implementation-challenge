@@ -90,7 +90,7 @@ com.iol.sdimplementationchallenge/
 
 HTTP contracts: allowed → 200 `{"allowed":true}`; denied → 429 + `Retry-After` header.
 
-## Key Constraints (from CHALLENGE.md / PROMPT_CONTEXT.md)
+## Key Constraints (from CHALLENGE.md)
 
 - **Justify concurrency**: every concurrent construct must trace to a real scenario (race test validates it)
 - **TDD order**: failing tests first, then implement
