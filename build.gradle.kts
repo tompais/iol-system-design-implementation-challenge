@@ -115,6 +115,15 @@ jacoco {
 
 tasks.test {
     useJUnitPlatform()
+    // --enable-native-access suppresses Netty's sun.misc.Unsafe::allocateMemory warning.
+    // --add-opens silences Kotlin compiler internals (objectFieldOffset).
+    // -Xshare:off prevents JaCoCo CDS classpath conflict during instrumentation.
+    jvmArgs(
+        "--enable-native-access=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/sun.misc=ALL-UNNAMED",
+        "-Xshare:off",
+    )
     finalizedBy(tasks.jacocoTestReport)
 }
 
