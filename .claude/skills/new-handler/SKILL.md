@@ -6,16 +6,22 @@ Scaffold a complete WebFlux Functional endpoint following the project's thin-han
 
 ## Package Location
 
-Files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
+Most files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
 
 | File | Sub-package |
 |------|-------------|
 | `<Name>Request.kt` | `adapter/api/requests/` → `...adapter.api.requests` |
 | `<Name>Response.kt` | `adapter/api/responses/` → `...adapter.api.responses` |
 | `<Name>Handler.kt` | `adapter/api/handlers/` → `...adapter.api.handlers` |
-| `<Name>ExceededException.kt` | `adapter/api/errors/exceptions/` → `...adapter.api.errors.exceptions` |
 | Exception handler entry | `adapter/api/errors/handler/RateLimitExceptionHandler.kt` |
-| `<Name>Router.kt` + `<Name>RouterOperations.kt` | `adapter/api/routing/` → `...adapter.api.routing` |
+| `<Name>Router.kt` | `adapter/api/routing/routers/` → `...adapter.api.routing.routers` |
+| `<Name>RouterOperations.kt` | `adapter/api/routing/routers/operations/annotations/` → `...routing.routers.operations.annotations` |
+
+Domain exceptions live outside the adapter, under `src/main/kotlin/com/iol/ratelimiter/core/domain/`:
+
+| File | Package |
+|------|---------|
+| `<Name>DeniedException.kt` | `core/domain/` → `...core.domain` |
 
 ---
 
@@ -61,14 +67,11 @@ Keep response DTOs flat — no nested objects unless the API contract requires i
 ```kotlin
 package com.iol.ratelimiter.adapter.api.handlers
 
-import com.iol.ratelimiter.adapter.api.errors.exceptions.<Name>ExceededException
 import com.iol.ratelimiter.adapter.api.requests.<Name>Request
 import com.iol.ratelimiter.adapter.api.responses.<Name>Response
+import com.iol.ratelimiter.adapter.api.validation.BodyValidator
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.port.RateLimiterPort
-import org.springframework.validation.BeanPropertyBindingResult
-import org.springframework.validation.Validator
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.awaitBody
@@ -76,18 +79,13 @@ import org.springframework.web.reactive.function.server.bodyValueAndAwait
 
 class <Name>Handler(
     private val rateLimiter: RateLimiterPort,
-    private val validator: Validator,
+    private val bodyValidator: BodyValidator,
 ) {
     suspend fun <verb>(request: ServerRequest): ServerResponse {
         val body = request.awaitBody<<Name>Request>()
-        val errors = BeanPropertyBindingResult(body, "<name>Request")
-        validator.validate(body, errors)
-        if (errors.hasErrors()) return ServerResponse.badRequest().bodyValueAndAwait(errors.allErrors.map { it.defaultMessage })
-
-        return when (val result = rateLimiter.tryConsume(RateLimitKey(body.key))) {
-            is RateLimitResult.Allowed -> ServerResponse.ok().bodyValueAndAwait(<Name>Response(allowed = true))
-            is RateLimitResult.Denied  -> throw <Name>ExceededException(result.retryAfterSeconds)
-        }
+        bodyValidator.validate(body)                       // throws BadRequestException → 400
+        rateLimiter.tryConsume(RateLimitKey(body.key))     // throws RateLimitDeniedException → @RestControllerAdvice
+        return ServerResponse.ok().bodyValueAndAwait(<Name>Response(allowed = true))
     }
 }
 ```
@@ -96,10 +94,10 @@ class <Name>Handler(
 - Handler functions are `suspend fun` — always
 - Use `awaitBody<T>()` to read the request body
 - Use `buildAndAwait()` or `bodyValueAndAwait(...)` to build responses
-- The `Denied` branch **throws** — never builds a 429 response directly in the handler
-- HTTP 429 mapping and `Retry-After` header live in the `@ExceptionHandler`, not here
+- Domain service **throws** on denial — handler never builds 429 responses directly
+- HTTP status mapping and `Retry-After` header live in `RateLimitExceptionHandler`, not here
 - Handler contains **NO business logic** — no if/else on domain fields, no computation
-- Validation runs via `Validator`, error response is the only exception to the throw-on-deny rule
+- Validation runs via `bodyValidator.validate(body)`; constraint annotations go on the DTO
 
 ---
 
@@ -125,36 +123,34 @@ fun rateLimitRouter(
 
 ## Exception + ExceptionHandler Pattern
 
-### `<Name>ExceededException.kt`
+### `<Name>DeniedException.kt` — lives in `core/domain/` (pure Kotlin, no Spring)
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api.errors.exceptions
+package com.iol.ratelimiter.core.domain
 
-import org.springframework.http.HttpStatus
-import org.springframework.web.server.ResponseStatusException
-
-class <Name>ExceededException(
+class <Name>DeniedException(
     val retryAfterSeconds: Long,
-) : ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS) {
-    companion object {
-        private const val serialVersionUID = 1L
-    }
-}
+) : RuntimeException("<name> denied. Retry after ${retryAfterSeconds}s.")
 ```
 
-### `<Name>ExceptionHandler.kt` (or add to the existing `RateLimitExceptionHandler`)
+Domain exceptions are pure Kotlin — no Spring imports. This keeps `core/domain/` framework-free and testable without the application context.
+
+### Exception handler entry (add to the existing `RateLimitExceptionHandler`)
 
 ```kotlin
-@ExceptionHandler(<Name>ExceededException::class)
-fun handle<Name>Exceeded(ex: <Name>ExceededException): ResponseEntity<<Name>Response> =
+@ExceptionHandler(<Name>DeniedException::class)
+fun handle<Name>Denied(ex: <Name>DeniedException): ResponseEntity<<Name>Response> =
     ResponseEntity
-        .status(ex.statusCode)
+        .status(HttpStatus.TOO_MANY_REQUESTS)
         .header("Retry-After", ex.retryAfterSeconds.toString())
         .body(<Name>Response(false))
 ```
 
+> **Note:** The existing `RateLimitDeniedException` handler already returns `RateLimitResponse`. A new endpoint that needs its own response type must define `<Name>DeniedException` in `core/domain/`, throw it from its domain service, and add a dedicated `@ExceptionHandler(<Name>DeniedException::class)` entry — keeping each exception type uniquely mapped.
+
 **Why this pattern?**
 - The handler stays truly thin — it never decides the HTTP shape of an error response
+- Domain exception lives in `core/domain/` — survives framework migrations unchanged
 - `@RestControllerAdvice` centralises all error-to-HTTP mappings in one auditable file
 - New exception types are added to the advice class, not scattered across handler files
 
@@ -168,7 +164,7 @@ Use the composed-annotation pattern — one annotation per router, placed on the
 ### `<Name>RouterOperations.kt`
 
 ```kotlin
-package com.iol.ratelimiter.adapter.api.routing
+package com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -226,7 +222,8 @@ See `RateLimiterRouterOperations.kt` for the complete reference implementation.
 
 ```kotlin
 @Bean
-fun <name>Handler(rateLimiter: RateLimiterPort, validator: Validator) = <Name>Handler(rateLimiter, validator)
+fun <name>Handler(rateLimiter: RateLimiterPort, bodyValidator: BodyValidator) =
+    <Name>Handler(rateLimiter, bodyValidator)
 
 @Bean
 @<Name>RouterOperations
@@ -242,8 +239,8 @@ fun rateLimitRouter(
 
 - [ ] `<Name>Request.kt` — validation on DTO fields
 - [ ] `<Name>Response.kt` — flat response DTO
-- [ ] `<Name>Handler.kt` — `suspend fun`, validates via `Validator`, throws on `Denied`
-- [ ] `<Name>ExceededException.kt` — extends `ResponseStatusException(TOO_MANY_REQUESTS)`
+- [ ] `<Name>Handler.kt` — `suspend fun`, validates via `bodyValidator.validate(body)`, linear (no when/if on result)
+- [ ] `<Name>DeniedException.kt` in `core/domain/` — pure Kotlin `RuntimeException`, no Spring imports
 - [ ] `@ExceptionHandler` entry in `RateLimitExceptionHandler` (or new advice class)
 - [ ] Router entry added to `RateLimiterRouter.kt`
 - [ ] `<Name>RouterOperations.kt` composed annotation + placed on `@Bean` in config

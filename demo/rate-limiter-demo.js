@@ -13,6 +13,7 @@
  */
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { Counter } from "k6/metrics";
 import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
@@ -66,6 +67,9 @@ export const options = {
     "checks{scenario:validation_missing_key}": ["rate==1"],
     "checks{scenario:validation_blank_key}": ["rate==1"],
     "checks{scenario:concurrency}": ["rate==1"],
+    // Enforce the exact concurrency invariant: capacity=10 → 10 allowed, 90 denied
+    concurrency_allowed: ["count==10"],
+    concurrency_denied: ["count==90"],
   },
 };
 
@@ -124,21 +128,23 @@ export function validationBlankKey() {
  * Scenario 5: Concurrency burst.
  * 100 VUs all hit the same key simultaneously. Bucket capacity = 10,
  * so exactly 10 must return 200 and 90 must return 429.
+ *
+ * Counter metrics aggregate across all VU runtimes; plain JS variables do not.
  */
 const CONCURRENCY_KEY = `burst-${uuidv4()}`;
-let allowed = 0;
-let denied = 0;
+const allowedCounter = new Counter("concurrency_allowed");
+const deniedCounter = new Counter("concurrency_denied");
 
 export function concurrencyBurst() {
   const res = http.post(ENDPOINT, JSON.stringify({ key: CONCURRENCY_KEY }), { headers: HEADERS });
 
   if (res.status === 200) {
-    allowed++;
+    allowedCounter.add(1);
     check(res, {
       "burst allowed → allowed=true": (r) => JSON.parse(r.body).allowed === true,
     });
   } else {
-    denied++;
+    deniedCounter.add(1);
     check(res, {
       "burst denied → 429": (r) => r.status === 429,
       "burst denied → allowed=false": (r) => JSON.parse(r.body).allowed === false,
@@ -147,6 +153,8 @@ export function concurrencyBurst() {
 }
 
 export function handleSummary(data) {
-  console.log(`\nConcurrency burst: ${allowed} allowed / ${denied} denied (capacity=${CAPACITY})`);
+  const allowedCount = data.metrics.concurrency_allowed?.values?.count ?? 0;
+  const deniedCount = data.metrics.concurrency_denied?.values?.count ?? 0;
+  console.log(`\nConcurrency burst: ${allowedCount} allowed / ${deniedCount} denied (capacity=${CAPACITY})`);
   return {};
 }

@@ -58,4 +58,4 @@ BASE_URL=http://my-server:8080 k6 run demo/rate-limiter-demo.js
 Concurrency burst: 10 allowed / 90 denied (capacity=10)
 ```
 
-All checks at `rate==1` → exit code 0.
+All checks at `rate==1`, `concurrency_allowed count==10`, `concurrency_denied count==90` → exit code 0.
