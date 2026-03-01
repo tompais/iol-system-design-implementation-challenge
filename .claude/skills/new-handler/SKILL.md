@@ -6,17 +6,22 @@ Scaffold a complete WebFlux Functional endpoint following the project's thin-han
 
 ## Package Location
 
-Files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
+Most files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
 
 | File | Sub-package |
 |------|-------------|
 | `<Name>Request.kt` | `adapter/api/requests/` → `...adapter.api.requests` |
 | `<Name>Response.kt` | `adapter/api/responses/` → `...adapter.api.responses` |
 | `<Name>Handler.kt` | `adapter/api/handlers/` → `...adapter.api.handlers` |
-| `<Name>DeniedException.kt` | `core/domain/` → `...core.domain` |
 | Exception handler entry | `adapter/api/errors/handler/RateLimitExceptionHandler.kt` |
 | `<Name>Router.kt` | `adapter/api/routing/routers/` → `...adapter.api.routing.routers` |
 | `<Name>RouterOperations.kt` | `adapter/api/routing/routers/operations/annotations/` → `...routing.routers.operations.annotations` |
+
+Domain exceptions live outside the adapter, under `src/main/kotlin/com/iol/ratelimiter/core/domain/`:
+
+| File | Package |
+|------|---------|
+| `<Name>DeniedException.kt` | `core/domain/` → `...core.domain` |
 
 ---
 
@@ -133,15 +138,15 @@ Domain exceptions are pure Kotlin — no Spring imports. This keeps `core/domain
 ### Exception handler entry (add to the existing `RateLimitExceptionHandler`)
 
 ```kotlin
-@ExceptionHandler(RateLimitDeniedException::class)
-fun handle<Name>Denied(ex: RateLimitDeniedException): ResponseEntity<<Name>Response> =
+@ExceptionHandler(<Name>DeniedException::class)
+fun handle<Name>Denied(ex: <Name>DeniedException): ResponseEntity<<Name>Response> =
     ResponseEntity
         .status(HttpStatus.TOO_MANY_REQUESTS)
         .header("Retry-After", ex.retryAfterSeconds.toString())
         .body(<Name>Response(false))
 ```
 
-> **Building a genuinely new domain operation?** Define `<Name>DeniedException` in `core/domain/` (pure Kotlin `RuntimeException`, no Spring), throw it from your domain service, and add a matching `@ExceptionHandler` entry above — following the same pattern as `RateLimitDeniedException`.
+> **Note:** The existing `RateLimitDeniedException` handler already returns `RateLimitResponse`. A new endpoint that needs its own response type must define `<Name>DeniedException` in `core/domain/`, throw it from its domain service, and add a dedicated `@ExceptionHandler(<Name>DeniedException::class)` entry — keeping each exception type uniquely mapped.
 
 **Why this pattern?**
 - The handler stays truly thin — it never decides the HTTP shape of an error response
