@@ -1,6 +1,7 @@
 package com.iol.ratelimiter
 
 import com.iol.ratelimiter.adapter.api.RateLimitHandler
+import com.iol.ratelimiter.adapter.api.RateLimiterRouterOperations
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.RateLimiterPort
 import com.iol.ratelimiter.infra.InMemoryBucketStore
@@ -15,6 +16,10 @@ import com.iol.ratelimiter.adapter.api.rateLimitRouter as buildRateLimitRouter
 /**
  * Wires all rate-limiter beans. Single source of truth for the dependency graph —
  * no `@Component` or `@Autowired` annotations exist in `infra/` or `adapter/`.
+ *
+ * `@RateLimiterRouterOperations` provides SpringDoc with the OpenAPI metadata it cannot infer
+ * from functional routes (coRouter has no annotations for introspection).
+ * All route documentation is centralised in that composed annotation.
  */
 @Configuration
 class RateLimiterConfig {
@@ -37,5 +42,6 @@ class RateLimiterConfig {
     ) = RateLimitHandler(rateLimiter, validator)
 
     @Bean
+    @RateLimiterRouterOperations
     fun rateLimitRouter(handler: RateLimitHandler) = buildRateLimitRouter(handler)
 }

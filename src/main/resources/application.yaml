@@ -2,6 +2,14 @@ spring:
   application:
     name: sd-implementation-challenge
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    display-request-duration: true
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
 rate-limiter:
   capacity: 10
   refill-rate-per-second: 5

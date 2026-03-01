@@ -1,0 +1,49 @@
+@startuml rate-limiter-sequence-check
+title POST /api/rate-limit/check — Request Sequence
+
+skinparam defaultFontName Monospaced
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "coRouter\n(RateLimiterRouter)" as Router
+participant "RateLimitHandler\n(suspend fun check)" as Handler
+participant "LocalValidatorFactoryBean" as Validator
+participant "TokenBucketRateLimiter\n(CAS loop)" as Limiter
+participant "InMemoryBucketStore\n(ConcurrentHashMap)" as Store
+participant "AtomicReference\n<BucketState>" as Ref
+participant "RateLimitExceptionHandler\n(@RestControllerAdvice)" as EH
+
+Client -> Router : POST /api/rate-limit/check\n{"key":"user-1"}
+Router -> Handler : check(ServerRequest)
+
+Handler -> Handler : awaitBody<RateLimitRequest>()
+Handler -> Validator : validate(body, errors)
+alt blank or missing key
+    Validator --> Handler : BindingResult with errors
+    Handler --> Client : 400 Bad Request
+end
+
+Handler -> Limiter : tryConsume(RateLimitKey("user-1"))
+
+loop CAS retry (until compareAndSet succeeds)
+    Limiter -> Store : getOrCreate(key, ::initialState)
+    Store --> Limiter : AtomicReference<BucketState>
+    Limiter -> Ref : get()  — read current state
+    Ref --> Limiter : BucketState(milliTokens, lastRefillAt)
+    Limiter -> Limiter : computeRefill(state)\n earned = refillRate × elapsedMs\n capped at capacity × 1000
+    alt milliTokens ≥ 1000
+        Limiter -> Ref : compareAndSet(current, next)\n(milliTokens − 1000)
+        alt CAS succeeds (no concurrent modification)
+            Ref --> Limiter : true
+            Limiter --> Handler : RateLimitResult.Allowed
+            Handler --> Client : 200 OK {"allowed":true}
+        else CAS fails (another thread changed state)
+            Ref --> Limiter : false — retry loop
+        end
+    else milliTokens < 1000 (bucket empty)
+        Limiter --> Handler : RateLimitResult.Denied(retryAfterSeconds)
+        Handler -> EH : throw RateLimitExceededException(retryAfterSeconds)
+        EH --> Client : 429 Too Many Requests\nRetry-After: <N>\n{"allowed":false}
+    end
+end
+@enduml
