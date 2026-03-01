@@ -26,13 +26,10 @@ java {
     }
 }
 
-val jvmTargetVersion = java.toolchain.languageVersion.get().asInt()
-
-// Gate the Kotlin compiler daemon's --add-opens flag on Java 17+, where the module system
-// restricts access to sun.misc. Co-located with the test JVM flags below for maintainability.
-if (jvmTargetVersion >= 17) {
-    extra["kotlin.daemon.jvmargs"] = "--add-opens java.base/sun.misc=ALL-UNNAMED"
-}
+val jvmTargetVersion =
+    java.toolchain.languageVersion
+        .get()
+        .asInt()
 
 configurations {
     compileOnly {
