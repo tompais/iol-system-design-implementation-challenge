@@ -1,6 +1,7 @@
 services:
   grafana-lgtm:
     image: 'grafana/otel-lgtm:latest'
+    restart: unless-stopped
     ports:
       - '3000:3000'
       - '9090:9090'
@@ -11,6 +12,7 @@ services:
 
   app:
     build: .
+    restart: unless-stopped
     ports:
       - '8080:8080'
     environment:

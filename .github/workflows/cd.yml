@@ -1,0 +1,28 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [master]
+    types: [completed]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      EC2_REPO_PATH: ${{ secrets.EC2_REPO_PATH }}
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.1.0
+        env:
+          REPO_PATH: ${{ secrets.EC2_REPO_PATH }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: REPO_PATH
+          script: |
+            cd "$REPO_PATH"
+            git pull origin master
+            docker compose up --build -d app

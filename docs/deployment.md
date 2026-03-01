@@ -161,3 +161,42 @@ The `--build` flag rebuilds the app image; `grafana-lgtm` is not rebuilt (uses t
 docker compose down          # stop containers, keep volumes (Grafana data retained)
 docker compose down -v       # stop + delete volumes (Grafana data wiped)
 ```
+
+---
+
+## Automated Deployment (CD)
+
+The `.github/workflows/cd.yml` workflow redeploys the app to EC2 automatically on every merge to `master`, but only when the CI pipeline has passed.
+
+### How it works
+
+1. A merge to `master` triggers the CI workflow (`ci.yml`)
+2. On CI success, the `cd.yml` `workflow_run` trigger fires
+3. The deploy job SSH's into the EC2 instance, pulls the latest code, and runs `docker compose up --build -d app`
+4. Only the app container is rebuilt — `grafana-lgtm` keeps running with the existing image
+
+### One-time EC2 prerequisites
+
+The manual setup steps in [AWS EC2 Free Tier](#aws-ec2-free-tier-247-hosting) must be completed once (Docker installed, repo cloned). After that, all updates are automated.
+
+### Required GitHub Secrets
+
+Configure these under **GitHub repo → Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+|--------|-------|
+| `EC2_HOST` | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`) |
+| `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
+| `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
+| `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
+
+### Restart policy
+
+Both services in `compose.yaml` include `restart: unless-stopped`. This ensures the containers automatically restart after an EC2 instance reboot (e.g. scheduled maintenance, stop/start), without any manual intervention.
+
+### Verify after deploy
+
+```bash
+curl http://<ec2-ip>:8080/actuator/health
+# → {"status":"UP"}
+```
