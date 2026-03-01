@@ -12,12 +12,15 @@ jobs:
   request-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Add Copilot as reviewer
+      - name: Request Copilot review
+        continue-on-error: true  # Requires Copilot code review enabled in repo Settings → General → Code review assignments
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          gh pr edit "$PR_NUMBER" \
-            --repo "$REPO" \
-            --add-reviewer "github-copilot[bot]"
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+            -f "reviewers[]=github-copilot"
