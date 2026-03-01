@@ -19,6 +19,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-lgtm:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_SERVICE_NAME: rate-limiter
+      # Micrometer's OTLP registry uses HTTP/protobuf; port 4317 is gRPC-only.
+      # Override the URL it derives from OTEL_EXPORTER_OTLP_ENDPOINT to use port 4318.
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://grafana-lgtm:4318/v1/metrics
     depends_on:
       - grafana-lgtm
     networks:
