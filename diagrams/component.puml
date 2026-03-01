@@ -1,0 +1,59 @@
+@startuml rate-limiter-components
+title Rate Limiter — Component Diagram
+
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+
+' ─── Layers ───────────────────────────────────────────────
+package "adapter/api" #E8F5E9 {
+    component "[RateLimiterRouter]\ncoRouter" as Router
+    component "[RateLimitHandler]\nsuspend fun check()" as Handler
+    component "[RateLimitExceptionHandler]\n@RestControllerAdvice" as ExHandler
+    component "RateLimitRequest\nRateLimitResponse" as DTOs
+}
+
+package "core/port" #E3F2FD {
+    interface "RateLimiterPort\n+tryConsume(key)" as Port
+    interface "BucketStore\n+getOrCreate(key, init)" as StorePort
+    interface "Clock\n+nowMillis()" as ClockPort
+}
+
+package "core/domain" #FFF9C4 {
+    component "RateLimitKey\n@JvmInline value class" as Key
+    component "BucketState\nmilliTokens: Long\nlastRefillAt: Long" as State
+    component "RateLimitResult\nAllowed | Denied(retryAfterSeconds)" as Result
+    component "TokenBucketConfig\ncapacity, refillRatePerSecond" as Config
+}
+
+package "infra" #FCE4EC {
+    component "[TokenBucketRateLimiter]\nCAS loop + lazy refill" as Limiter
+    component "[InMemoryBucketStore]\nConcurrentHashMap + computeIfAbsent" as Store
+    component "[SystemClock]\nSystem.currentTimeMillis()" as Clock
+}
+
+component "RateLimiterConfig\n@Configuration" as Cfg
+
+' ─── Wiring ───────────────────────────────────────────────
+Router --> Handler : delegates\nHTTP request
+Handler --> Port : tryConsume(key)
+Handler ..> ExHandler : throws\nRateLimitExceededException
+Handler ..> DTOs : reads/writes
+ExHandler ..> DTOs : writes
+
+Port <|.. Limiter : implements
+StorePort <|.. Store : implements
+ClockPort <|.. Clock : implements
+
+Limiter --> StorePort : getOrCreate()
+Limiter --> ClockPort : nowMillis()
+Limiter --> State : reads/writes via CAS
+Limiter --> Config : capacity\nrefillRate
+
+Handler ..> Key : wraps String
+
+Cfg ..> Limiter : @Bean
+Cfg ..> Store : @Bean
+Cfg ..> Clock : @Bean
+Cfg ..> Handler : @Bean
+Cfg ..> Router : @Bean
+@enduml
