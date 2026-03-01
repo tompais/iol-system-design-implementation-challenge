@@ -20,5 +20,5 @@ fi
 cd "$PROJECT_DIR"
 
 echo "--- Detekt (on save) ---"
-# detektMain is faster than detekt (skips test sources)
-./gradlew detektMain --continue -q 2>&1 | tail -30
+# detekt covers both main and test source sets — catches violations in test code too
+./gradlew detekt --continue -q 2>&1 | tail -30
