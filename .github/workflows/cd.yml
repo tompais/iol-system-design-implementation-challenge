@@ -25,7 +25,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
-            set -euo pipefail
+            set -eu
             CLONE_DIR="$(dirname "$REPO_PATH")"
             if [ ! -d "$CLONE_DIR/.git" ]; then
               [ -n "$CLONE_DIR" ] && [ "$CLONE_DIR" != "/" ] || { echo "Error: CLONE_DIR is empty or unsafe: '$CLONE_DIR'" >&2; exit 1; }
