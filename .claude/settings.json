@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew:*)",
+      "Bash(git:*)",
+      "Bash(bash .claude/scripts/*:*)",
+      "Bash(chmod +x:*)",
+      "WebSearch",
+      "WebFetch"
+    ]
+  }
+}
