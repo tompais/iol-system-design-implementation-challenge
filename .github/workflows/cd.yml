@@ -26,6 +26,59 @@ jobs:
           envs: REPO_PATH
           script: |
             set -euo pipefail 2>/dev/null || set -euo
+
+            # Versiones pinneadas para garantizar reproducibilidad y verificación de integridad.
+            REQUIRED_COMPOSE="2.36.0"
+            REQUIRED_BUILDX="0.17.0"
+
+            # Detecta la arquitectura para seleccionar el binario correcto (x86_64 o ARM64).
+            ARCH=$(uname -m)
+            case "$ARCH" in
+              x86_64)  COMPOSE_ARCH="linux-x86_64"; BUILDX_ARCH="linux-amd64" ;;
+              aarch64) COMPOSE_ARCH="linux-aarch64"; BUILDX_ARCH="linux-arm64" ;;
+              *) echo "Arquitectura no soportada: $ARCH" >&2; exit 1 ;;
+            esac
+
+            # Instala Docker y Git si cualquiera de los dos no está presente en el EC2.
+            if ! command -v docker &>/dev/null || ! command -v git &>/dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y docker.io git
+              sudo usermod -aG docker "$USER"
+            fi
+
+            # Asegura que el servicio de Docker esté arrancado y habilitado,
+            # independientemente de si el binario fue recién instalado o ya existía.
+            if ! sudo systemctl is-active --quiet docker; then
+              sudo systemctl start docker
+            fi
+            if ! sudo systemctl is-enabled --quiet docker; then
+              sudo systemctl enable docker
+            fi
+
+            # Instala el plugin de Docker Compose pinneado si no está disponible.
+            if ! docker compose version &>/dev/null; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -fSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}" \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              COMPOSE_SHA=$(curl -fsSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}.sha256" | awk '{print $1}')
+              [ -n "$COMPOSE_SHA" ] || { echo "No se pudo obtener el checksum de Compose" >&2; exit 1; }
+              echo "$COMPOSE_SHA  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            fi
+
+            # Instala Docker Buildx >= 0.17.0 si la versión instalada es inferior o no existe.
+            CURRENT_BUILDX=$(docker buildx version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0")
+            if [ "$(printf '%s\n' "$REQUIRED_BUILDX" "$CURRENT_BUILDX" | sort -V | head -1)" != "$REQUIRED_BUILDX" ]; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -fSL "https://github.com/docker/buildx/releases/download/v${REQUIRED_BUILDX}/buildx-v${REQUIRED_BUILDX}.${BUILDX_ARCH}" \
+                -o /usr/local/lib/docker/cli-plugins/docker-buildx
+              BUILDX_SHA=$(curl -fsSL "https://github.com/docker/buildx/releases/download/v${REQUIRED_BUILDX}/checksums.txt" \
+                | grep "buildx-v${REQUIRED_BUILDX}.${BUILDX_ARCH}$" | awk '{print $1}')
+              [ -n "$BUILDX_SHA" ] || { echo "No se pudo obtener el checksum de Buildx" >&2; exit 1; }
+              echo "$BUILDX_SHA  /usr/local/lib/docker/cli-plugins/docker-buildx" | sha256sum -c -
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+            fi
+
             CLONE_DIR="${REPO_PATH%/}"
             case "$CLONE_DIR" in
               "~"|"~/"*)
@@ -58,4 +111,4 @@ jobs:
             git fetch origin master
             git checkout master
             git reset --hard origin/master
-            docker compose up --build -d app
+            sudo docker compose up --build -d app
