@@ -25,8 +25,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
+            set -e
             CLONE_DIR="$(dirname "$REPO_PATH")"
             if [ ! -d "$CLONE_DIR/.git" ]; then
+              rm -rf "$CLONE_DIR"
               git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
             fi
             cd "$REPO_PATH"
