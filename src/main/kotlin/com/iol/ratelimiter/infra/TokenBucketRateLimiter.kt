@@ -1,8 +1,8 @@
 package com.iol.ratelimiter.infra
 
 import com.iol.ratelimiter.core.domain.BucketState
+import com.iol.ratelimiter.core.domain.RateLimitDeniedException
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.BucketStore
 import com.iol.ratelimiter.core.port.Clock
@@ -31,15 +31,15 @@ class TokenBucketRateLimiter(
     private val store: BucketStore,
     private val clock: Clock,
 ) : RateLimiterPort {
-    override fun tryConsume(key: RateLimitKey): RateLimitResult {
+    override fun tryConsume(key: RateLimitKey) {
         val ref = store.getOrCreate(key) { initialState() }
         while (true) {
             val current = ref.get()
             val refilled = computeRefill(current)
-            if (refilled.milliTokens < ONE_MILLI_TOKEN) return RateLimitResult.Denied(retryAfterSeconds(refilled))
+            if (refilled.milliTokens < ONE_MILLI_TOKEN) throw RateLimitDeniedException(retryAfterSeconds(refilled))
             val next = refilled.copy(milliTokens = refilled.milliTokens - ONE_MILLI_TOKEN)
             // CAS: if state changed between read and write, retry with fresh read
-            if (ref.compareAndSet(current, next)) return RateLimitResult.Allowed
+            if (ref.compareAndSet(current, next)) return
         }
     }
 
