@@ -22,10 +22,10 @@ docker compose up -d
 docker compose up --build
 ```
 
-| Service | URL |
-|---------|-----|
-| App | http://localhost:8080 |
-| Grafana | http://localhost:3000 |
+| Service                        | URL                   |
+|--------------------------------|-----------------------|
+| App                            | http://localhost:8080 |
+| Grafana                        | http://localhost:3000 |
 | Prometheus-compatible endpoint | http://localhost:9090 |
 
 Smoke test:
@@ -57,11 +57,11 @@ AWS EC2 t2.micro is **750 hours/month free for 12 months** — enough for contin
 
 ### 2. Security group rules
 
-| Type | Protocol | Port | Source |
-|------|----------|------|--------|
-| SSH | TCP | 22 | Your IP (e.g. `x.x.x.x/32`) |
-| Custom TCP | TCP | 8080 | `0.0.0.0/0` (API) |
-| Custom TCP | TCP | 3000 | `0.0.0.0/0` (Grafana) |
+| Type       | Protocol | Port | Source                      |
+|------------|----------|------|-----------------------------|
+| SSH        | TCP      | 22   | Your IP (e.g. `x.x.x.x/32`) |
+| Custom TCP | TCP      | 8080 | `0.0.0.0/0` (API)           |
+| Custom TCP | TCP      | 3000 | `0.0.0.0/0` (Grafana)       |
 
 Restrict port 3000 to your IP in production — Grafana has no auth by default.
 
@@ -102,7 +102,7 @@ docker compose logs -f app
 
 ```bash
 # From EC2 or your local machine (replace <public-ip>)
-curl -X POST http://<public-ip>:8080/api/rate-limit/check \
+curl -X POST https://<public-ip>:8080/api/rate-limit/check \
   -H 'Content-Type: application/json' \
   -d '{"key":"smoke-test"}'
 # → 200 {"allowed":true}
@@ -116,12 +116,12 @@ Grafana: open `http://<public-ip>:3000` in a browser (default credentials: admin
 
 The `Dockerfile` sets these JVM flags via `JAVA_OPTS`:
 
-| Flag | Value | Reason |
-|------|-------|--------|
-| `-XX:+UseZGC` | — | Sub-millisecond GC pauses — ideal for reactive workloads |
-| `-Xmx256m` | 256 MB | App heap ceiling; leaves ~700 MB for LGTM stack |
-| `-XX:MaxDirectMemorySize` | 128 MB | Netty direct buffer cap — off-heap, not counted in `-Xmx` |
-| `-XX:+ExitOnOutOfMemoryError` | — | Crash-fast; Docker restarts the container |
+| Flag                          | Value  | Reason                                                    |
+|-------------------------------|--------|-----------------------------------------------------------|
+| `-XX:+UseZGC`                 | —      | Sub-millisecond GC pauses — ideal for reactive workloads  |
+| `-Xmx256m`                    | 256 MB | App heap ceiling; leaves ~700 MB for LGTM stack           |
+| `-XX:MaxDirectMemorySize`     | 128 MB | Netty direct buffer cap — off-heap, not counted in `-Xmx` |
+| `-XX:+ExitOnOutOfMemoryError` | —      | Crash-fast; Docker restarts the container                 |
 
 Typical memory footprint:
 - App JVM (heap + direct): ~256 MB + 128 MB = ~384 MB
@@ -135,10 +135,10 @@ Typical memory footprint:
 
 Import pre-built dashboards from grafana.com after the stack starts:
 
-| Dashboard | ID |
-|-----------|-----|
+| Dashboard              | ID    |
+|------------------------|-------|
 | Spring Boot Statistics | 12685 |
-| JVM (Micrometer) | 4701 |
+| JVM (Micrometer)       | 4701  |
 
 In Grafana: **Dashboards → Import → paste ID → Load**.
 
@@ -183,11 +183,11 @@ The manual setup steps in [AWS EC2 Free Tier](#aws-ec2-free-tier-247-hosting) mu
 
 Configure these under **GitHub repo → Settings → Secrets and variables → Actions → New repository secret**:
 
-| Secret | Value |
-|--------|-------|
-| `EC2_HOST` | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`) |
-| `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
-| `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
+| Secret          | Value                                                                                                  |
+|-----------------|--------------------------------------------------------------------------------------------------------|
+| `EC2_HOST`      | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`)                                                  |
+| `EC2_USERNAME`  | SSH username — `ec2-user` on Amazon Linux                                                              |
+| `EC2_SSH_KEY`   | Full contents of the `.pem` private key file                                                           |
 | `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
 
 ### Restart policy
@@ -197,6 +197,6 @@ Both services in `compose.yaml` include `restart: unless-stopped`. This ensures 
 ### Verify after deploy
 
 ```bash
-curl http://<ec2-ip>:8080/actuator/health
+curl https://<ec2-ip>:8080/actuator/health
 # → {"status":"UP"}
 ```
