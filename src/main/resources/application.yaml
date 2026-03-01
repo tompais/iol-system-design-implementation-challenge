@@ -1,3 +1,7 @@
 spring:
   application:
     name: sd-implementation-challenge
+
+rate-limiter:
+  capacity: 10
+  refill-rate-per-second: 5
