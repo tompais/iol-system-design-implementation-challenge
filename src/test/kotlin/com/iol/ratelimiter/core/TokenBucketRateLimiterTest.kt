@@ -3,9 +3,8 @@ package com.iol.ratelimiter.core
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
-import assertk.assertions.isInstanceOf
+import com.iol.ratelimiter.core.domain.RateLimitDeniedException
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.Clock
 import com.iol.ratelimiter.infra.InMemoryBucketStore
@@ -13,6 +12,8 @@ import com.iol.ratelimiter.infra.TokenBucketRateLimiter
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
@@ -41,26 +42,24 @@ class TokenBucketRateLimiterTest {
     @Test
     @DisplayName("first request on a fresh bucket is allowed")
     fun `first request allowed`() {
-        assertThat(limiter.tryConsume(RateLimitKey("u"))).isInstanceOf(RateLimitResult.Allowed::class)
+        assertDoesNotThrow { limiter.tryConsume(RateLimitKey("u")) }
     }
 
     @Test
     @DisplayName("initial bucket is full — exactly capacity requests are allowed, the next is denied")
     fun `exactly capacity requests allowed then denied`() {
         val key = RateLimitKey("u")
-        repeat(10) {
-            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
-        }
-        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        repeat(10) { assertDoesNotThrow { limiter.tryConsume(key) } }
+        assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) }
     }
 
     @Test
-    @DisplayName("Denied result carries a retryAfterSeconds value of at least 1")
-    fun `denied result has positive retryAfterSeconds`() {
+    @DisplayName("Denied exception carries a retryAfterSeconds value of at least 1")
+    fun `denied exception has positive retryAfterSeconds`() {
         val key = RateLimitKey("u")
         repeat(10) { limiter.tryConsume(key) }
-        val result = limiter.tryConsume(key) as RateLimitResult.Denied
-        assertThat(result.retryAfterSeconds).isGreaterThanOrEqualTo(1L)
+        val ex = assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) }
+        assertThat(ex.retryAfterSeconds).isGreaterThanOrEqualTo(1L)
     }
 
     @Test
@@ -69,7 +68,7 @@ class TokenBucketRateLimiterTest {
         val key = RateLimitKey("u")
         repeat(10) { limiter.tryConsume(key) }
         now += 200L
-        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertDoesNotThrow { limiter.tryConsume(key) }
     }
 
     /**
@@ -93,11 +92,10 @@ class TokenBucketRateLimiterTest {
         val key = RateLimitKey("u")
         repeat(10) { limiter.tryConsume(key) }
         now += elapsedMs
-        val result = limiter.tryConsume(key)
         if (expected == "allowed") {
-            assertThat(result).isInstanceOf(RateLimitResult.Allowed::class)
+            assertDoesNotThrow { limiter.tryConsume(key) }
         } else {
-            assertThat(result).isInstanceOf(RateLimitResult.Denied::class)
+            assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) }
         }
     }
 
@@ -107,10 +105,8 @@ class TokenBucketRateLimiterTest {
         val key = RateLimitKey("u")
         // Advance 10 seconds → would refill 50 tokens, but capacity is 10
         now += 10_000L
-        repeat(10) {
-            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
-        }
-        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        repeat(10) { assertDoesNotThrow { limiter.tryConsume(key) } }
+        assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) }
     }
 
     @Test
@@ -118,9 +114,7 @@ class TokenBucketRateLimiterTest {
     fun `frozen clock keeps bucket exhausted`() {
         val key = RateLimitKey("u")
         repeat(10) { limiter.tryConsume(key) }
-        repeat(5) {
-            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
-        }
+        repeat(5) { assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) } }
     }
 
     @Test
@@ -129,7 +123,7 @@ class TokenBucketRateLimiterTest {
         val a = RateLimitKey("a")
         val b = RateLimitKey("b")
         repeat(10) { limiter.tryConsume(a) }
-        assertThat(limiter.tryConsume(b)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertDoesNotThrow { limiter.tryConsume(b) }
     }
 
     @Test
@@ -137,9 +131,7 @@ class TokenBucketRateLimiterTest {
     fun `initial bucket is full`() {
         val key = RateLimitKey("fresh")
         // A full bucket allows exactly capacity requests with zero time elapsed
-        repeat(10) {
-            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
-        }
+        repeat(10) { assertDoesNotThrow { limiter.tryConsume(key) } }
     }
 
     @Test
@@ -147,9 +139,9 @@ class TokenBucketRateLimiterTest {
     fun `retryAfterSeconds is ceiling of refill period`() {
         val key = RateLimitKey("u")
         repeat(10) { limiter.tryConsume(key) }
-        val denied = limiter.tryConsume(key) as RateLimitResult.Denied
         // At 5 tokens/sec, 1 token takes 200ms = 0.2 sec → ceiling = 1
-        assertThat(denied.retryAfterSeconds).isEqualTo(1L)
+        val ex = assertThrows<RateLimitDeniedException> { limiter.tryConsume(key) }
+        assertThat(ex.retryAfterSeconds).isEqualTo(1L)
     }
 
     @Test
@@ -160,13 +152,13 @@ class TokenBucketRateLimiterTest {
         val fwdLimiter = TokenBucketRateLimiter(cfg, InMemoryBucketStore(), Clock { clockNow })
         val key = RateLimitKey("fwd-jump-test")
 
-        repeat(5) { assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
-        assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        repeat(5) { assertDoesNotThrow { fwdLimiter.tryConsume(key) } }
+        assertThrows<RateLimitDeniedException> { fwdLimiter.tryConsume(key) }
 
         // Jump forward by years — bucket must refill to exactly capacity, not overflow
         clockNow = Long.MAX_VALUE / 2
-        repeat(5) { assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
-        assertThat(fwdLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        repeat(5) { assertDoesNotThrow { fwdLimiter.tryConsume(key) } }
+        assertThrows<RateLimitDeniedException> { fwdLimiter.tryConsume(key) }
     }
 
     @Test
@@ -177,14 +169,14 @@ class TokenBucketRateLimiterTest {
         val regLimiter = TokenBucketRateLimiter(cfg, InMemoryBucketStore(), Clock { clockNow })
         val key = RateLimitKey("regression-test")
 
-        repeat(3) { assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
+        repeat(3) { assertDoesNotThrow { regLimiter.tryConsume(key) } }
 
         // Clock steps backward by 500ms (NTP correction)
         clockNow = 500L
 
         // 2 tokens remain; regression must not destroy them
-        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
-        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
-        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        assertDoesNotThrow { regLimiter.tryConsume(key) }
+        assertDoesNotThrow { regLimiter.tryConsume(key) }
+        assertThrows<RateLimitDeniedException> { regLimiter.tryConsume(key) }
     }
 }

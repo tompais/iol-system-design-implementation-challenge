@@ -2,6 +2,7 @@ package com.iol.ratelimiter
 
 import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
 import com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations.RateLimiterRouterOperations
+import com.iol.ratelimiter.adapter.api.validation.BodyValidator
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.RateLimiterPort
 import com.iol.ratelimiter.infra.InMemoryBucketStore
@@ -36,10 +37,13 @@ class RateLimiterConfig {
     fun rateLimiter(config: TokenBucketConfig): RateLimiterPort = TokenBucketRateLimiter(config, bucketStore(), SystemClock)
 
     @Bean
+    fun bodyValidator(validator: Validator) = BodyValidator(validator)
+
+    @Bean
     fun rateLimitHandler(
         rateLimiter: RateLimiterPort,
-        validator: Validator,
-    ) = RateLimitHandler(rateLimiter, validator)
+        bodyValidator: BodyValidator,
+    ) = RateLimitHandler(rateLimiter, bodyValidator)
 
     @Bean
     @RateLimiterRouterOperations

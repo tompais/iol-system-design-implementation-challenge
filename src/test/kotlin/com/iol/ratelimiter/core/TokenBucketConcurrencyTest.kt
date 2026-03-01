@@ -2,8 +2,8 @@ package com.iol.ratelimiter.core
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import com.iol.ratelimiter.core.domain.RateLimitDeniedException
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.Clock
 import com.iol.ratelimiter.infra.InMemoryBucketStore
@@ -42,9 +42,11 @@ class TokenBucketConcurrencyTest {
             (1..100).map {
                 Thread {
                     latch.await()
-                    when (limiter.tryConsume(key)) {
-                        is RateLimitResult.Allowed -> allowed.incrementAndGet()
-                        is RateLimitResult.Denied -> denied.incrementAndGet()
+                    try {
+                        limiter.tryConsume(key)
+                        allowed.incrementAndGet()
+                    } catch (_: RateLimitDeniedException) {
+                        denied.incrementAndGet()
                     }
                 }
             }
