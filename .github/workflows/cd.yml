@@ -6,6 +6,10 @@ on:
     branches: [master]
     types: [completed]
 
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
 jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -19,8 +23,11 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          host_fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
           envs: REPO_PATH
           script: |
             cd "$REPO_PATH"
-            git pull
+            git fetch origin master
+            git checkout master
+            git reset --hard origin/master
             docker compose up --build -d app

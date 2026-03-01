@@ -172,7 +172,7 @@ The `.github/workflows/cd.yml` workflow redeploys the app to EC2 automatically o
 
 1. A merge to `master` triggers the CI workflow (`ci.yml`)
 2. On CI success, the `cd.yml` `workflow_run` trigger fires
-3. The deploy job SSH's into the EC2 instance, pulls the latest code, and runs `docker compose up --build -d app`
+3. The deploy job SSHes into the EC2 instance, pulls the latest code, and runs `docker compose up --build -d app`
 4. Only the app container is rebuilt — `grafana-lgtm` keeps running with the existing image
 
 ### One-time EC2 prerequisites
@@ -188,6 +188,7 @@ Configure these under **GitHub repo → Settings → Secrets and variables → A
 | `EC2_HOST` | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`) |
 | `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
 | `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
+| `EC2_HOST_FINGERPRINT` | SSH host key fingerprint of the EC2 instance (run `ssh-keyscan <host>` to obtain) |
 | `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
 
 ### Restart policy
