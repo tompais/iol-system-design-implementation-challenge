@@ -15,6 +15,32 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      # Este paso asegura un entorno reproducible para la build en CI,
+      # evitando instalaciones manuales y errores de versión en el runner de Ubuntu.
+      - name: Instalar dependencias básicas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io git
+          sudo systemctl start docker
+          sudo systemctl enable docker
+          sudo usermod -aG docker $USER
+
+      # Instala Docker Buildx en versión específica para garantizar
+      # compatibilidad y eliminar dependencia de la versión preinstalada en EC2.
+      - name: Instalar Docker Buildx v0.17.0
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: v0.17.0
+
+      # Instala el plugin de Docker Compose en la ruta estándar del sistema,
+      # reemplazando cualquier instalación manual previa en EC2.
+      - name: Instalar Docker Compose plugin
+        run: |
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@25ce8cbbcb08177468c7ff7ec5cbfa236f9341e1 # v1.1.0
         env:
