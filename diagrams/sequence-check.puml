@@ -1,4 +1,5 @@
 @startuml rate-limiter-sequence-check
+!pragma layout smetana
 title POST /api/rate-limit/check — Request Sequence
 
 skinparam defaultFontName Monospaced
@@ -42,7 +43,7 @@ loop CAS retry (until compareAndSet succeeds)
         end
     else milliTokens < 1000 (bucket empty)
         Limiter --> Handler : RateLimitResult.Denied(retryAfterSeconds)
-        Handler -> EH : throw RateLimitExceededException(retryAfterSeconds)
+        Handler -> EH : throw RateLimitDeniedException(retryAfterSeconds)
         EH --> Client : 429 Too Many Requests\nRetry-After: <N>\n{"allowed":false}
     end
 end

@@ -29,13 +29,15 @@ Hexagonal (ports-and-adapters) in a single Gradle module, 4 logical layers:
 
 ```
 com.iol.ratelimiter/
-  core/domain/     ← pure domain: RateLimitKey, BucketState, RateLimitResult, TokenBucketConfig
+  core/domain/     ← pure domain: RateLimitKey, BucketState, RateLimitDeniedException, TokenBucketConfig
   core/port/       ← interfaces: Clock, BucketStore, RateLimiterPort
   infra/           ← implementations: SystemClock, InMemoryBucketStore, TokenBucketRateLimiter
   adapter/api/     ← WebFlux Functional router (coRouter) + thin handler + DTOs + exception handler
   RateLimiterConfig.kt  ← @Configuration wiring all beans (zero @Component in infra/adapter)
   OpenApiConfig.kt      ← SpringDoc OpenAPI metadata
 ```
+
+See [`diagrams/component.mmd`](diagrams/component.mmd) for the full component diagram (renders natively on GitHub).
 
 **Algorithm:** Token Bucket with lazy refill. State stored as `milliTokens` (Long) for exact integer CAS — 1 token = 1000 milliTokens. Refill computed on each `tryConsume()` from elapsed time; no background threads.
 
@@ -118,7 +120,7 @@ Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern (
 
 | Layer | Test class | Type |
 |---|---|---|
-| Domain types | `RateLimitKeyTest`, `RateLimitResultTest` | Pure unit |
+| Domain types | `RateLimitKeyTest` | Pure unit |
 | Algorithm | `TokenBucketRateLimiterTest` | Unit (injectable Clock) |
 | Store isolation | `InMemoryBucketStoreTest` | Unit |
 | Concurrency | `TokenBucketConcurrencyTest` | Race test (`@RepeatedTest(10)`, 100 threads) |
@@ -126,6 +128,22 @@ Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern (
 | Smoke | `SdImplementationChallengeApplicationTests` | Full integration |
 
 See [`docs/testing.md`](docs/testing.md) for the full TDD approach and test pyramid rationale.
+
+---
+
+## Live Demo
+
+A [k6](https://k6.io) script exercises the rate limiter end-to-end: single request, bucket exhaustion, validation errors (missing key, blank key), and 100-VU concurrency burst.
+
+```bash
+# 1. Start the app
+docker compose up
+
+# 2. Run the demo (requires k6)
+k6 run demo/rate-limiter-demo.js
+```
+
+See [`demo/README.md`](demo/README.md) for details on all 5 scenarios and expected output.
 
 ---
 

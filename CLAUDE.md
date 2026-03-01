@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-This is a **System Design Implementation Challenge** — a working prototype of a **Rate Limiter** (Token Bucket algorithm), based on "System Design Interview Vol. 1" by Alex Xu. The challenge requires compiling code, passing tests, clean design, and documented trade-offs. See `CHALLENGE.md` and `PROMPT_CONTEXT.md` for scoring criteria.
+This is a **System Design Implementation Challenge** — a working prototype of a **Rate Limiter** (Token Bucket algorithm), based on "System Design Interview Vol. 1" by Alex Xu. The challenge requires compiling code, passing tests, clean design, and documented trade-offs. See `CHALLENGE.md` for scoring criteria.
 
 ## Engineering Principles (Non-Negotiable)
 
@@ -25,21 +25,21 @@ fun rateLimitRouter(handler: RateLimitHandler) = coRouter {
     POST("/api/rate-limit/check", handler::check)
 }
 
-// Handler (thin — delegates to use case, maps HTTP status)
-class RateLimitHandler(private val rateLimiter: RateLimiterPort) {
+// Handler (5 lines — validate, delegate, return 200; exceptions bubble to @RestControllerAdvice)
+class RateLimitHandler(
+    private val rateLimiter: RateLimiterPort,
+    private val bodyValidator: BodyValidator,
+) {
     suspend fun check(request: ServerRequest): ServerResponse {
-        val key = request.awaitBody<RateLimitRequest>().key
-        return when (val result = rateLimiter.tryConsume(RateLimitKey(key))) {
-            is RateLimitResult.Allowed -> ServerResponse.ok().buildAndAwait()
-            is RateLimitResult.Denied  -> ServerResponse.status(429)
-                .header("Retry-After", ...)
-                .buildAndAwait()
-        }
+        val body = request.awaitBody<RateLimitRequest>()
+        bodyValidator.validate(body)                          // throws BadRequestException → 400
+        rateLimiter.tryConsume(RateLimitKey(body.key))        // throws RateLimitDeniedException → 429
+        return ServerResponse.ok().bodyValueAndAwait(RateLimitResponse(true))
     }
 }
 ```
 
-**Handler rules**: handlers know which service to call, which HTTP status to return, and how to resolve the route. They contain NO business logic. Validation lives in the request DTO or service layer.
+**Handler rules**: handlers know which service to call and how to resolve the route; on the success path they always return 200 OK and let exceptions bubble. They contain NO business logic. Validation lives in `BodyValidator`; error-to-HTTP mapping (including non-200 statuses) lives in `RateLimitExceptionHandler`.
 
 ## Build & Development Commands
 
@@ -67,10 +67,10 @@ Hexagonal (ports-and-adapters) in a single Gradle module, 4 logical layers:
 
 ```
 com.iol.ratelimiter/
-  core/domain/     ← pure domain: RateLimitKey (value class), BucketState, RateLimitResult (sealed), TokenBucketConfig
+  core/domain/     ← pure domain: RateLimitKey (value class), BucketState, RateLimitDeniedException, TokenBucketConfig
   core/port/       ← interfaces: Clock (fun interface), BucketStore, RateLimiterPort
   infra/           ← implementations: SystemClock, InMemoryBucketStore (ConcurrentHashMap), TokenBucketRateLimiter (CAS loop)
-  adapter/api/     ← WebFlux Functional router (coRouter) + thin handler + DTOs
+  adapter/api/     ← WebFlux Functional router (coRouter) + thin handler + BodyValidator + DTOs + exception handler
   RateLimiterConfig.kt  ← @Configuration wiring all beans
 
 com.iol.sdimplementationchallenge/
@@ -90,7 +90,7 @@ com.iol.sdimplementationchallenge/
 
 HTTP contracts: allowed → 200 `{"allowed":true}`; denied → 429 + `Retry-After` header.
 
-## Key Constraints (from CHALLENGE.md / PROMPT_CONTEXT.md)
+## Key Constraints (from CHALLENGE.md)
 
 - **Justify concurrency**: every concurrent construct must trace to a real scenario (race test validates it)
 - **TDD order**: failing tests first, then implement
@@ -119,8 +119,11 @@ docs/
   development.md       ← local setup, quality gates, SonarLint config guidance
   testing.md           ← TDD approach, test pyramid for this project
 diagrams/
-  component.puml       ← PlantUML component diagram
+  component.mmd        ← Mermaid component diagram (renders natively on GitHub)
   sequence-check.puml  ← PlantUML sequence diagram for POST /api/rate-limit/check
+demo/
+  rate-limiter-demo.js ← k6 load test: 5 scenarios
+  README.md            ← k6 run instructions
 ```
 
 ## Git Conventions
@@ -137,11 +140,19 @@ Commit format: `type: short declarative statement`
 
 | Automation | Type | Trigger | Purpose |
 |---|---|---|---|
+| `ktlint-format-on-save.sh` | PostToolUse hook | Any `.kt` file write | Runs `./gradlew ktlintFormat` before detekt |
 | `detekt-on-save.sh` | PostToolUse hook | Any `.kt` file edit | Runs `./gradlew detektMain` after every Kotlin edit |
 | `guard-build-files.sh` | PreToolUse hook | Edit/Write | Warns before modifying `build.gradle.kts`, `gradle.properties` |
+| `guard-core-boundaries.sh` | PreToolUse hook | Edit/Write | Blocks Spring/Jakarta imports in `core/` or `infra/` |
 | `/quality-gate` | Skill | User invocation | Runs `./gradlew test detekt` and reports results |
 | `/design-doc` | Skill | User or Claude | Updates `rate-limiter/DESIGN.md` from current source |
-| context7 | MCP server | Auto (in `.mcp.json`) | Live Spring Boot 4.x / Kotlin / Resilience4J docs |
+| `/increment` | Skill | User invocation | TDD increment: branch, red-green-refactor, quality gate, PR |
+| `/new-handler` | Skill | User invocation | Scaffolds 4-piece WebFlux endpoint + domain exception + OpenAPI |
+| `/spring-optimize` | Skill | User invocation | Netty tuning, ZGC JVM flags, Actuator probe config |
+| `architecture-guardian` | Agent | Claude invocation | Greps `core/` + `infra/` for boundary violations |
+| `coverage-diff-guardian` | Agent | Claude invocation | Parses JaCoCo XML, flags per-file coverage drops |
+| `context7` | MCP server | Auto (in `.mcp.json`) | Live Spring Boot 4.x / Kotlin docs |
+| `github` | MCP server | Auto (in `.mcp.json`) | GitHub API — PRs, issues, reviews via `$GITHUB_TOKEN` |
 
 The Detekt hook only fires once the plugin is configured in `build.gradle.kts`. Gradle daemon keeps subsequent runs fast (~3-5s after warmup).
 

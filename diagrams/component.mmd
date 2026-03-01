@@ -1,0 +1,56 @@
+flowchart TB
+    subgraph adapter["adapter/api — WebFlux Functional"]
+        Router["RateLimiterRouter\ncoRouter { POST }"]
+        Handler["RateLimitHandler\nsuspend fun check()"]
+        BodyValidator["BodyValidator\nvalidate(body)"]
+        ExHandler["RateLimitExceptionHandler\n@RestControllerAdvice"]
+        DTOs["RateLimitRequest\nRateLimitResponse"]
+    end
+
+    subgraph ports["core/port — Interfaces"]
+        Port(["RateLimiterPort\ntryConsume(key): Unit"])
+        StorePort(["BucketStore\ngetOrCreate(key, init)"])
+        ClockPort(["Clock\nnowMillis(): Long"])
+    end
+
+    subgraph domain["core/domain — Pure Kotlin"]
+        Key["RateLimitKey\n@JvmInline value class"]
+        State["BucketState\nmilliTokens, lastRefillAt"]
+        Config["TokenBucketConfig\ncapacity, refillRatePerSecond"]
+        DeniedException["RateLimitDeniedException\nretryAfterSeconds: Long"]
+    end
+
+    subgraph infra["infra — Implementations"]
+        Limiter["TokenBucketRateLimiter\nCAS loop + lazy refill"]
+        Store["InMemoryBucketStore\nConcurrentHashMap"]
+        Clock["SystemClock\nSystem.currentTimeMillis()"]
+    end
+
+    Cfg["RateLimiterConfig\n@Configuration"]
+
+    Router --> Handler
+    Handler --> BodyValidator
+    Handler --> Port
+    Handler -.->|throws| DeniedException
+    ExHandler -.->|catches| DeniedException
+    Handler --> DTOs
+    ExHandler --> DTOs
+
+    Limiter -.->|implements| Port
+    Store -.->|implements| StorePort
+    Clock -.->|implements| ClockPort
+
+    Limiter --> StorePort
+    Limiter --> ClockPort
+    Limiter --> State
+    Limiter --> Config
+    Limiter -.->|throws| DeniedException
+
+    Handler --> Key
+
+    Cfg -.->|@Bean| Limiter
+    Cfg -.->|@Bean| Store
+    Cfg -.->|@Bean| Clock
+    Cfg -.->|@Bean| Handler
+    Cfg -.->|@Bean| BodyValidator
+    Cfg -.->|@Bean| Router

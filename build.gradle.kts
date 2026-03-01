@@ -26,6 +26,11 @@ java {
     }
 }
 
+val jvmTargetVersion =
+    java.toolchain.languageVersion
+        .get()
+        .asInt()
+
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
@@ -115,6 +120,16 @@ jacoco {
 
 tasks.test {
     useJUnitPlatform()
+    // Apply JVM flags required for Java 17+ module-system access restrictions and JaCoCo instrumentation.
+    // The toolchain targets Java 24; gating on version keeps these flags from silently relaxing older JDKs.
+    if (jvmTargetVersion >= 17) {
+        jvmArgs(
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/sun.misc=ALL-UNNAMED",
+            "-Xshare:off",
+        )
+    }
     finalizedBy(tasks.jacocoTestReport)
 }
 

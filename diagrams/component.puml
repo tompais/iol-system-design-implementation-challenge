@@ -1,4 +1,5 @@
 @startuml rate-limiter-components
+!pragma layout smetana
 title Rate Limiter — Component Diagram
 
 skinparam componentStyle rectangle
@@ -36,7 +37,7 @@ component "RateLimiterConfig\n@Configuration" as Cfg
 ' ─── Wiring ───────────────────────────────────────────────
 Router --> Handler : delegates\nHTTP request
 Handler --> Port : tryConsume(key)
-Handler ..> ExHandler : throws\nRateLimitExceededException
+Handler ..> ExHandler : throws\nRateLimitDeniedException
 Handler ..> DTOs : reads/writes
 ExHandler ..> DTOs : writes
 

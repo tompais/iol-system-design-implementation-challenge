@@ -1,8 +1,8 @@
 package com.iol.ratelimiter.infra
 
 import com.iol.ratelimiter.core.domain.BucketState
+import com.iol.ratelimiter.core.domain.RateLimitDeniedException
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.BucketStore
 import com.iol.ratelimiter.core.port.Clock
@@ -31,15 +31,15 @@ class TokenBucketRateLimiter(
     private val store: BucketStore,
     private val clock: Clock,
 ) : RateLimiterPort {
-    override fun tryConsume(key: RateLimitKey): RateLimitResult {
+    override fun tryConsume(key: RateLimitKey) {
         val ref = store.getOrCreate(key) { initialState() }
         while (true) {
             val current = ref.get()
             val refilled = computeRefill(current)
-            if (refilled.milliTokens < ONE_MILLI_TOKEN) return RateLimitResult.Denied(retryAfterSeconds(refilled))
+            if (refilled.milliTokens < ONE_MILLI_TOKEN) throw RateLimitDeniedException(retryAfterSeconds(refilled))
             val next = refilled.copy(milliTokens = refilled.milliTokens - ONE_MILLI_TOKEN)
             // CAS: if state changed between read and write, retry with fresh read
-            if (ref.compareAndSet(current, next)) return RateLimitResult.Allowed
+            if (ref.compareAndSet(current, next)) return
         }
     }
 
@@ -50,10 +50,11 @@ class TokenBucketRateLimiter(
         )
 
     private fun computeRefill(state: BucketState): BucketState {
-        val elapsedMs = clock.nowMillis() - state.lastRefillAt
+        val elapsedMs = maxOf(0L, clock.nowMillis() - state.lastRefillAt)
         // refillRatePerSecond [tokens/sec] × elapsedMs [ms] = earned milliTokens
         // (units: tokens/sec × ms = tokens·ms/sec = milliTokens, since 1000ms/sec × 1000mt/token cancel)
-        val earned = config.refillRatePerSecond * elapsedMs
+        // Cap earned to capacity to guard against huge forward clock jumps and Long overflow
+        val earned = minOf(config.refillRatePerSecond * elapsedMs, config.capacity * ONE_MILLI_TOKEN)
         val capped = minOf(state.milliTokens + earned, config.capacity * ONE_MILLI_TOKEN)
         return state.copy(milliTokens = capped, lastRefillAt = clock.nowMillis())
     }

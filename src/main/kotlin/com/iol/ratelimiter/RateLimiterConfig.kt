@@ -1,7 +1,8 @@
 package com.iol.ratelimiter
 
-import com.iol.ratelimiter.adapter.api.RateLimitHandler
-import com.iol.ratelimiter.adapter.api.RateLimiterRouterOperations
+import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
+import com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations.RateLimiterRouterOperations
+import com.iol.ratelimiter.adapter.api.validation.BodyValidator
 import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.RateLimiterPort
 import com.iol.ratelimiter.infra.InMemoryBucketStore
@@ -11,7 +12,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.validation.Validator
-import com.iol.ratelimiter.adapter.api.rateLimitRouter as buildRateLimitRouter
+import com.iol.ratelimiter.adapter.api.routing.routers.rateLimitRouter as buildRateLimitRouter
 
 /**
  * Wires all rate-limiter beans. Single source of truth for the dependency graph —
@@ -36,10 +37,13 @@ class RateLimiterConfig {
     fun rateLimiter(config: TokenBucketConfig): RateLimiterPort = TokenBucketRateLimiter(config, bucketStore(), SystemClock)
 
     @Bean
+    fun bodyValidator(validator: Validator) = BodyValidator(validator)
+
+    @Bean
     fun rateLimitHandler(
         rateLimiter: RateLimiterPort,
-        validator: Validator,
-    ) = RateLimitHandler(rateLimiter, validator)
+        bodyValidator: BodyValidator,
+    ) = RateLimitHandler(rateLimiter, bodyValidator)
 
     @Bean
     @RateLimiterRouterOperations
