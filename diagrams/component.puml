@@ -1,4 +1,5 @@
 @startuml rate-limiter-components
+!pragma layout smetana
 title Rate Limiter — Component Diagram
 
 skinparam componentStyle rectangle
