@@ -6,17 +6,22 @@ Scaffold a complete WebFlux Functional endpoint following the project's thin-han
 
 ## Package Location
 
-Files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
+Most files go into sub-packages of `src/main/kotlin/com/iol/ratelimiter/adapter/api/`:
 
 | File | Sub-package |
 |------|-------------|
 | `<Name>Request.kt` | `adapter/api/requests/` → `...adapter.api.requests` |
 | `<Name>Response.kt` | `adapter/api/responses/` → `...adapter.api.responses` |
 | `<Name>Handler.kt` | `adapter/api/handlers/` → `...adapter.api.handlers` |
-| `<Name>ExceededException.kt` | `adapter/api/errors/exceptions/` → `...adapter.api.errors.exceptions` |
 | Exception handler entry | `adapter/api/errors/handler/RateLimitExceptionHandler.kt` |
 | `<Name>Router.kt` | `adapter/api/routing/routers/` → `...adapter.api.routing.routers` |
 | `<Name>RouterOperations.kt` | `adapter/api/routing/routers/operations/annotations/` → `...routing.routers.operations.annotations` |
+
+Domain exceptions live outside the adapter, under `src/main/kotlin/com/iol/ratelimiter/core/domain/`:
+
+| File | Package |
+|------|---------|
+| `<Name>DeniedException.kt` | `core/domain/` → `...core.domain` |
 
 ---
 
@@ -79,7 +84,7 @@ class <Name>Handler(
     suspend fun <verb>(request: ServerRequest): ServerResponse {
         val body = request.awaitBody<<Name>Request>()
         bodyValidator.validate(body)                       // throws BadRequestException → 400
-        rateLimiter.tryConsume(RateLimitKey(body.key))     // throws domain exception → @RestControllerAdvice
+        rateLimiter.tryConsume(RateLimitKey(body.key))     // throws RateLimitDeniedException → @RestControllerAdvice
         return ServerResponse.ok().bodyValueAndAwait(<Name>Response(allowed = true))
     }
 }
@@ -140,6 +145,8 @@ fun handle<Name>Denied(ex: <Name>DeniedException): ResponseEntity<<Name>Response
         .header("Retry-After", ex.retryAfterSeconds.toString())
         .body(<Name>Response(false))
 ```
+
+> **Note:** The existing `RateLimitDeniedException` handler already returns `RateLimitResponse`. A new endpoint that needs its own response type must define `<Name>DeniedException` in `core/domain/`, throw it from its domain service, and add a dedicated `@ExceptionHandler(<Name>DeniedException::class)` entry — keeping each exception type uniquely mapped.
 
 **Why this pattern?**
 - The handler stays truly thin — it never decides the HTTP shape of an error response
