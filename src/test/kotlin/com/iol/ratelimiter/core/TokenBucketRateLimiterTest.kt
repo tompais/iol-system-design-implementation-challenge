@@ -1,0 +1,154 @@
+package com.iol.ratelimiter.core
+
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isInstanceOf
+import com.iol.ratelimiter.core.domain.RateLimitKey
+import com.iol.ratelimiter.core.domain.RateLimitResult
+import com.iol.ratelimiter.core.domain.TokenBucketConfig
+import com.iol.ratelimiter.core.port.Clock
+import com.iol.ratelimiter.infra.InMemoryBucketStore
+import com.iol.ratelimiter.infra.TokenBucketRateLimiter
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
+
+/**
+ * Unit tests for the Token Bucket algorithm implemented in [TokenBucketRateLimiter].
+ *
+ * Uses a controllable [Clock] stub so all timing is deterministic — no real-time dependencies.
+ * Capacity = 10 tokens, refill rate = 5 tokens/sec (1 token per 200 ms) unless overridden per test.
+ *
+ * Concurrency correctness is covered separately in [TokenBucketConcurrencyTest].
+ */
+@DisplayName("TokenBucketRateLimiter — algorithm correctness")
+class TokenBucketRateLimiterTest {
+    private var now = 0L
+    private val clock = Clock { now }
+    private val config = TokenBucketConfig(capacity = 10L, refillRatePerSecond = 5L)
+
+    private lateinit var limiter: TokenBucketRateLimiter
+
+    @BeforeEach
+    fun setUp() {
+        now = 0L
+        limiter = TokenBucketRateLimiter(config, InMemoryBucketStore(), clock)
+    }
+
+    @Test
+    @DisplayName("first request on a fresh bucket is allowed")
+    fun `first request allowed`() {
+        assertThat(limiter.tryConsume(RateLimitKey("u"))).isInstanceOf(RateLimitResult.Allowed::class)
+    }
+
+    @Test
+    @DisplayName("initial bucket is full — exactly capacity requests are allowed, the next is denied")
+    fun `exactly capacity requests allowed then denied`() {
+        val key = RateLimitKey("u")
+        repeat(10) {
+            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        }
+        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+    }
+
+    @Test
+    @DisplayName("Denied result carries a retryAfterSeconds value of at least 1")
+    fun `denied result has positive retryAfterSeconds`() {
+        val key = RateLimitKey("u")
+        repeat(10) { limiter.tryConsume(key) }
+        val result = limiter.tryConsume(key) as RateLimitResult.Denied
+        assertThat(result.retryAfterSeconds).isGreaterThanOrEqualTo(1L)
+    }
+
+    @Test
+    @DisplayName("after 200 ms (1 token refilled at 5/sec), a denied bucket becomes allowed again")
+    fun `refill after 200ms restores one token`() {
+        val key = RateLimitKey("u")
+        repeat(10) { limiter.tryConsume(key) }
+        now += 200L
+        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+    }
+
+    /**
+     * Parameterized partial-refill scenarios.
+     *
+     * At 5 tokens/sec, each millisecond earns 5 milliTokens. One full token = 1000 milliTokens.
+     * After 100 ms → 500 milliTokens earned (< 1000) → still denied.
+     * After 200 ms → 1000 milliTokens earned → allowed.
+     */
+    @ParameterizedTest(name = "after {0} ms elapsed: result is {1}")
+    @CsvSource(
+        "100, denied",
+        "199, denied",
+        "200, allowed",
+    )
+    @DisplayName("sub-token partial refill: only a full 1000 milliTokens unlocks a request")
+    fun `partial refill does not allow a request`(
+        elapsedMs: Long,
+        expected: String,
+    ) {
+        val key = RateLimitKey("u")
+        repeat(10) { limiter.tryConsume(key) }
+        now += elapsedMs
+        val result = limiter.tryConsume(key)
+        if (expected == "allowed") {
+            assertThat(result).isInstanceOf(RateLimitResult.Allowed::class)
+        } else {
+            assertThat(result).isInstanceOf(RateLimitResult.Denied::class)
+        }
+    }
+
+    @Test
+    @DisplayName("refill is capped at capacity — no token overflow above bucket size")
+    fun `refill does not exceed capacity`() {
+        val key = RateLimitKey("u")
+        // Advance 10 seconds → would refill 50 tokens, but capacity is 10
+        now += 10_000L
+        repeat(10) {
+            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        }
+        assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+    }
+
+    @Test
+    @DisplayName("frozen clock — no time passes, denied stays denied")
+    fun `frozen clock keeps bucket exhausted`() {
+        val key = RateLimitKey("u")
+        repeat(10) { limiter.tryConsume(key) }
+        repeat(5) {
+            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+        }
+    }
+
+    @Test
+    @DisplayName("two keys share no state — each has its own independent bucket")
+    fun `two keys are independent`() {
+        val a = RateLimitKey("a")
+        val b = RateLimitKey("b")
+        repeat(10) { limiter.tryConsume(a) }
+        assertThat(limiter.tryConsume(b)).isInstanceOf(RateLimitResult.Allowed::class)
+    }
+
+    @Test
+    @DisplayName("fresh bucket starts full — initial state equals capacity")
+    fun `initial bucket is full`() {
+        val key = RateLimitKey("fresh")
+        // A full bucket allows exactly capacity requests with zero time elapsed
+        repeat(10) {
+            assertThat(limiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        }
+    }
+
+    @Test
+    @DisplayName("retryAfterSeconds is the ceiling of 1 token at the current refill rate")
+    fun `retryAfterSeconds is ceiling of refill period`() {
+        val key = RateLimitKey("u")
+        repeat(10) { limiter.tryConsume(key) }
+        val denied = limiter.tryConsume(key) as RateLimitResult.Denied
+        // At 5 tokens/sec, 1 token takes 200ms = 0.2 sec → ceiling = 1
+        assertThat(denied.retryAfterSeconds).isEqualTo(1L)
+    }
+}
