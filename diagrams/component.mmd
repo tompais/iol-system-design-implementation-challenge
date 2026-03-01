@@ -36,9 +36,9 @@ flowchart TB
     Handler --> DTOs
     ExHandler --> DTOs
 
-    Port -.->|implements| Limiter
-    StorePort -.->|implements| Store
-    ClockPort -.->|implements| Clock
+    Limiter -.->|implements| Port
+    Store -.->|implements| StorePort
+    Clock -.->|implements| ClockPort
 
     Limiter --> StorePort
     Limiter --> ClockPort
