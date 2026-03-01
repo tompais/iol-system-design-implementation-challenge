@@ -29,13 +29,15 @@ Hexagonal (ports-and-adapters) in a single Gradle module, 4 logical layers:
 
 ```
 com.iol.ratelimiter/
-  core/domain/     ← pure domain: RateLimitKey, BucketState, RateLimitResult, TokenBucketConfig
+  core/domain/     ← pure domain: RateLimitKey, BucketState, RateLimitDeniedException, TokenBucketConfig
   core/port/       ← interfaces: Clock, BucketStore, RateLimiterPort
   infra/           ← implementations: SystemClock, InMemoryBucketStore, TokenBucketRateLimiter
   adapter/api/     ← WebFlux Functional router (coRouter) + thin handler + DTOs + exception handler
   RateLimiterConfig.kt  ← @Configuration wiring all beans (zero @Component in infra/adapter)
   OpenApiConfig.kt      ← SpringDoc OpenAPI metadata
 ```
+
+See [`diagrams/component.mmd`](diagrams/component.mmd) for the full component diagram (renders natively on GitHub).
 
 **Algorithm:** Token Bucket with lazy refill. State stored as `milliTokens` (Long) for exact integer CAS — 1 token = 1000 milliTokens. Refill computed on each `tryConsume()` from elapsed time; no background threads.
 
@@ -118,7 +120,7 @@ Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern (
 
 | Layer | Test class | Type |
 |---|---|---|
-| Domain types | `RateLimitKeyTest`, `RateLimitResultTest` | Pure unit |
+| Domain types | `RateLimitKeyTest` | Pure unit |
 | Algorithm | `TokenBucketRateLimiterTest` | Unit (injectable Clock) |
 | Store isolation | `InMemoryBucketStoreTest` | Unit |
 | Concurrency | `TokenBucketConcurrencyTest` | Race test (`@RepeatedTest(10)`, 100 threads) |
