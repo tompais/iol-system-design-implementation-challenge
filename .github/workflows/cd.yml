@@ -25,7 +25,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
+            if [ -z "${REPO_PATH:-}" ]; then
+              echo "Error: REPO_PATH is not set or is empty" >&2
+              exit 1
+            fi
+            if [ "${REPO_PATH#/}" = "$REPO_PATH" ]; then
+              echo "Error: REPO_PATH must be an absolute path: '$REPO_PATH'" >&2
+              exit 1
+            fi
             CLONE_DIR="$(dirname "$REPO_PATH")"
+            CLONE_DIR_RESOLVED="$(realpath -m "$CLONE_DIR")"
+            if [ "$CLONE_DIR_RESOLVED" = "/" ]; then
+              echo "Error: CLONE_DIR is unsafe: '$CLONE_DIR_RESOLVED'" >&2
+              exit 1
+            fi
             if [ ! -d "$CLONE_DIR/.git" ]; then
               git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
             fi
