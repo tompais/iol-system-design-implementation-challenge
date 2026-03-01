@@ -15,32 +15,6 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      # Este paso asegura un entorno reproducible para la build en CI,
-      # evitando instalaciones manuales y errores de versión en el runner de Ubuntu.
-      - name: Instalar dependencias básicas
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io git
-          sudo systemctl start docker
-          sudo systemctl enable docker
-          sudo usermod -aG docker $USER
-
-      # Instala Docker Buildx en versión específica para garantizar
-      # compatibilidad y eliminar dependencia de la versión preinstalada en EC2.
-      - name: Instalar Docker Buildx v0.17.0
-        uses: docker/setup-buildx-action@v3
-        with:
-          version: v0.17.0
-
-      # Instala el plugin de Docker Compose en la ruta estándar del sistema,
-      # reemplazando cualquier instalación manual previa en EC2.
-      - name: Instalar Docker Compose plugin
-        run: |
-          sudo mkdir -p /usr/local/lib/docker/cli-plugins
-          sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
-            -o /usr/local/lib/docker/cli-plugins/docker-compose
-          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-
       - name: Deploy to EC2
         uses: appleboy/ssh-action@25ce8cbbcb08177468c7ff7ec5cbfa236f9341e1 # v1.1.0
         env:
@@ -52,6 +26,38 @@ jobs:
           envs: REPO_PATH
           script: |
             set -euo pipefail 2>/dev/null || set -euo
+
+            # Asegura un entorno reproducible en EC2, eliminando la necesidad de
+            # instalaciones manuales previas y garantizando versiones consistentes.
+
+            # Instala Docker y Git si no están presentes en el EC2
+            if ! command -v docker &>/dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y docker.io git
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker "$USER"
+            fi
+
+            # Instala el plugin de Docker Compose en la ruta estándar del sistema
+            # si no está disponible, evitando depender de una instalación previa en EC2.
+            if ! docker compose version &>/dev/null; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            fi
+
+            # Instala Docker Buildx >= 0.17.0 si la versión instalada es inferior o no existe.
+            REQUIRED_BUILDX="0.17.0"
+            CURRENT_BUILDX=$(docker buildx version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0")
+            if [ "$(printf '%s\n' "$REQUIRED_BUILDX" "$CURRENT_BUILDX" | sort -V | head -1)" != "$REQUIRED_BUILDX" ]; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -SL "https://github.com/docker/buildx/releases/download/v${REQUIRED_BUILDX}/buildx-v${REQUIRED_BUILDX}.linux-amd64" \
+                -o /usr/local/lib/docker/cli-plugins/docker-buildx
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+            fi
+
             CLONE_DIR="${REPO_PATH%/}"
             case "$CLONE_DIR" in
               "~"|"~/"*)
