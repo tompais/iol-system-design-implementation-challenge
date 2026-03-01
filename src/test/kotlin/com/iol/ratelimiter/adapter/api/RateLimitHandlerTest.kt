@@ -1,11 +1,13 @@
 package com.iol.ratelimiter.adapter.api
 
+import com.iol.ratelimiter.core.domain.RateLimitDeniedException
 import com.iol.ratelimiter.core.domain.RateLimitKey
-import com.iol.ratelimiter.core.domain.RateLimitResult
 import com.iol.ratelimiter.core.port.RateLimiterPort
 import com.iol.sdimplementationchallenge.SdImplementationChallengeApplication
 import com.ninjasquad.springmockk.MockkBean
 import io.mockk.every
+import io.mockk.just
+import io.mockk.runs
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -48,7 +50,7 @@ class RateLimitHandlerTest {
     @Test
     @DisplayName("allowed result → 200 OK with allowed=true body")
     fun `allowed result returns 200 with allowed body`() {
-        every { rateLimiter.tryConsume(RateLimitKey("user-1")) } returns RateLimitResult.Allowed
+        every { rateLimiter.tryConsume(RateLimitKey("user-1")) } just runs
 
         client
             .post()
@@ -66,7 +68,7 @@ class RateLimitHandlerTest {
     @Test
     @DisplayName("denied result → 429 with allowed=false body and Retry-After header")
     fun `denied result returns 429 with Retry-After header and denied body`() {
-        every { rateLimiter.tryConsume(RateLimitKey("user-1")) } returns RateLimitResult.Denied(5L)
+        every { rateLimiter.tryConsume(RateLimitKey("user-1")) } throws RateLimitDeniedException(5L)
 
         client
             .post()
