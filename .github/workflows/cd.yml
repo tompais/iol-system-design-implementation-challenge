@@ -25,11 +25,11 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: REPO_PATH
           script: |
-            set -euo pipefail
-            CLONE_DIR="$REPO_PATH"
+            set -euo pipefail 2>/dev/null || set -euo
+            CLONE_DIR="${REPO_PATH%/}"
             if [ ! -d "$CLONE_DIR/.git" ]; then
               case "$CLONE_DIR" in
-                ""|"/"|"."|".."|"$HOME"|"/home"|"/root")
+                ""|"/"|"."|".."|"${HOME:-}"|"/home"|"/root")
                   echo "Refusing to remove unsafe directory: '$CLONE_DIR'" >&2
                   exit 1
                   ;;
