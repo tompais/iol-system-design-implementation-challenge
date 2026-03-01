@@ -151,4 +151,23 @@ class TokenBucketRateLimiterTest {
         // At 5 tokens/sec, 1 token takes 200ms = 0.2 sec → ceiling = 1
         assertThat(denied.retryAfterSeconds).isEqualTo(1L)
     }
+
+    @Test
+    @DisplayName("clock regression does not reduce token balance")
+    fun `clock regression does not reduce token balance`() {
+        var clockNow = 1000L
+        val cfg = TokenBucketConfig(capacity = 5L, refillRatePerSecond = 1L)
+        val regLimiter = TokenBucketRateLimiter(cfg, InMemoryBucketStore(), Clock { clockNow })
+        val key = RateLimitKey("regression-test")
+
+        repeat(3) { assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class) }
+
+        // Clock steps backward by 500ms (NTP correction)
+        clockNow = 500L
+
+        // 2 tokens remain; regression must not destroy them
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Allowed::class)
+        assertThat(regLimiter.tryConsume(key)).isInstanceOf(RateLimitResult.Denied::class)
+    }
 }

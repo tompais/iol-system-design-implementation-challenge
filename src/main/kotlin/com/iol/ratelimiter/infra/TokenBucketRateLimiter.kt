@@ -50,7 +50,7 @@ class TokenBucketRateLimiter(
         )
 
     private fun computeRefill(state: BucketState): BucketState {
-        val elapsedMs = clock.nowMillis() - state.lastRefillAt
+        val elapsedMs = maxOf(0L, clock.nowMillis() - state.lastRefillAt)
         // refillRatePerSecond [tokens/sec] × elapsedMs [ms] = earned milliTokens
         // (units: tokens/sec × ms = tokens·ms/sec = milliTokens, since 1000ms/sec × 1000mt/token cancel)
         val earned = config.refillRatePerSecond * elapsedMs
