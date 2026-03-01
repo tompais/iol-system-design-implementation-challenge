@@ -26,6 +26,11 @@ java {
     }
 }
 
+val jvmTargetVersion =
+    java.toolchain.languageVersion
+        .get()
+        .asInt()
+
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
@@ -115,15 +120,16 @@ jacoco {
 
 tasks.test {
     useJUnitPlatform()
-    // --enable-native-access suppresses Netty's sun.misc.Unsafe::allocateMemory warning.
-    // --add-opens silences Kotlin compiler internals (objectFieldOffset).
-    // -Xshare:off prevents JaCoCo CDS classpath conflict during instrumentation.
-    jvmArgs(
-        "--enable-native-access=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/sun.misc=ALL-UNNAMED",
-        "-Xshare:off",
-    )
+    // Apply JVM flags required for Java 17+ module-system access restrictions and JaCoCo instrumentation.
+    // The toolchain targets Java 24; gating on version keeps these flags from silently relaxing older JDKs.
+    if (jvmTargetVersion >= 17) {
+        jvmArgs(
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/sun.misc=ALL-UNNAMED",
+            "-Xshare:off",
+        )
+    }
     finalizedBy(tasks.jacocoTestReport)
 }
 
