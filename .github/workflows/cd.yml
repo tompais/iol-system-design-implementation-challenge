@@ -27,6 +27,23 @@ jobs:
           script: |
             set -euo pipefail 2>/dev/null || set -euo
             CLONE_DIR="${REPO_PATH%/}"
+            case "$CLONE_DIR" in
+              "~"|"~/"*)
+                if [ -z "${HOME:-}" ]; then
+                  echo "HOME must be set when using ~ in REPO_PATH (got: '$CLONE_DIR')" >&2
+                  exit 1
+                fi
+                CLONE_DIR="${HOME}${CLONE_DIR#\~}"
+                ;;
+              "~"*)
+                echo "~user paths are not supported in REPO_PATH (got: '$CLONE_DIR')" >&2
+                exit 1
+                ;;
+            esac
+            case "$CLONE_DIR" in
+              /*) ;;
+              *) echo "REPO_PATH must resolve to an absolute path (got: '$CLONE_DIR')" >&2; exit 1 ;;
+            esac
             if [ ! -d "$CLONE_DIR/.git" ]; then
               case "$CLONE_DIR" in
                 ""|"/"|"."|".."|"${HOME:-}"|"/home"|"/root")
@@ -37,7 +54,7 @@ jobs:
               rm -rf "$CLONE_DIR"
               git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
             fi
-            cd "$REPO_PATH"
+            cd "$CLONE_DIR"
             git fetch origin master
             git checkout master
             git reset --hard origin/master
