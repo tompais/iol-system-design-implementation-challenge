@@ -14,6 +14,12 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+logging:
+  level:
+    root: WARN
+    com.iol.ratelimiter: TRACE
+    com.iol.sdimplementationchallenge: TRACE
+
 rate-limiter:
   capacity: 10
   refill-rate-per-second: 5
