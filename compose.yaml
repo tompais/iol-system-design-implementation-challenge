@@ -5,8 +5,8 @@ services:
     ports:
       - '3000:3000'
       - '9090:9090'
-      - '4317'
-      - '4318'
+      - '4317:4317'
+      - '4318:4318'
     networks:
       - observability
 
@@ -22,6 +22,7 @@ services:
       # Micrometer's OTLP registry uses HTTP/protobuf; port 4317 is gRPC-only.
       # Override the URL it derives from OTEL_EXPORTER_OTLP_ENDPOINT to use port 4318.
       MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://grafana-lgtm:4318/v1/metrics
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://grafana-lgtm:4317/v1/traces
     depends_on:
       - grafana-lgtm
     networks:

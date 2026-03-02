@@ -1,10 +1,11 @@
 spring:
+  web:
+    error:
+      include-binding-errors: always
+      include-message: always
+      include-exception: true
   application:
     name: sd-implementation-challenge
-  otel:
-    tracing:
-      sampling:
-        probability: 1.0
 
 springdoc:
   swagger-ui:
@@ -25,6 +26,9 @@ rate-limiter:
   refill-rate-per-second: 5
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
   endpoints:
     web:
       exposure:
@@ -32,7 +36,14 @@ management:
   endpoint:
     health:
       show-details: always
-  otlp:
+  prometheus:
     metrics:
       export:
+        step: 10s
+  otlp:
+    tracing:
+      endpoint: http://localhost:4317/v1/traces
+    metrics:
+      export:
+        url: http://localhost:4318/v1/metrics
         step: 10s
