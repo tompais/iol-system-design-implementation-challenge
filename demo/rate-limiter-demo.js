@@ -19,7 +19,7 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 const ENDPOINT = `${BASE_URL}/api/rate-limit/check`;
 const HEADERS = { "Content-Type": "application/json" };
 const CAPACITY = 10;
-// Ten times the capacity: guarantees the bucket is exhausted and still has remaining requests
+// Ten times the capacity: under typical latencies this should exhaust the bucket and still leave extra requests
 const TOTAL_REQUESTS = CAPACITY * 10;
 
 export const options = {
@@ -147,6 +147,7 @@ export function capacityEnforcement() {
 
   check({ allowed, denied, unexpected }, {
     [`at least ${CAPACITY} requests allowed`]: (data) => data.allowed >= CAPACITY,
+    ["at least one request denied (capacity enforced)"]: (data) => data.denied > 0,
     ["no unexpected HTTP status codes"]: (data) => data.unexpected === 0,
     ["all requests accounted for"]: (data) => data.allowed + data.denied + data.unexpected === TOTAL_REQUESTS,
   });
