@@ -1,5 +1,7 @@
 # Rate Limiter — System Design Implementation Challenge
 
+[![codecov](https://codecov.io/gh/tompais/iol-system-design-implementation-challenge/graph/badge.svg)](https://codecov.io/gh/tompais/iol-system-design-implementation-challenge)
+
 A working prototype of a **Token Bucket rate limiter**, built as a submission for the System Design Implementation Challenge based on *System Design Interview Vol. 1* by Alex Xu.
 
 ---
