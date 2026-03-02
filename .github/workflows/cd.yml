@@ -33,7 +33,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=yes \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "REPO_PATH='${REPO_PATH}' bash -s" << 'DEPLOY_SCRIPT'
+            "REPO_PATH=$(printf '%q' "$REPO_PATH") bash -s" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
 
             # Versiones pinneadas para garantizar reproducibilidad y verificación de integridad.
