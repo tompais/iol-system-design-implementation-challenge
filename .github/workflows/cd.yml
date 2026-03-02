@@ -118,4 +118,4 @@ jobs:
             git checkout master
             git reset --hard origin/master
             sudo docker compose up --build -d app
-            DEPLOY_SCRIPT
+          DEPLOY_SCRIPT
