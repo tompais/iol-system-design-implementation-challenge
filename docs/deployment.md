@@ -7,6 +7,56 @@ Grafana LGTM stack. OTLP (gRPC) is used for metrics and traces — no Prometheus
 
 ---
 
+## Live Instance (AWS EC2)
+
+The service is publicly accessible at:
+
+| Service | URL |
+|---------|-----|
+| **Rate Limiter API** | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080` |
+| **Swagger UI** | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/swagger-ui.html` |
+| **OpenAPI JSON** | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/v3/api-docs` |
+| **Grafana Dashboards** | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:3000` |
+| **Prometheus** | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:9090` |
+
+Quick smoke test against the live instance:
+
+```bash
+curl -X POST http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/rate-limit/check \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"demo-user"}'
+# → 200 {"allowed":true}
+```
+
+### Port Mapping
+
+| Port | Protocol | Service | Exposed to |
+|------|----------|---------|------------|
+| 22 | TCP | SSH — instance administration | Operator IP only |
+| 8080 | TCP | Rate Limiter API (Spring Boot / Netty) | `0.0.0.0/0` (public) |
+| 3000 | TCP | Grafana (dashboards, alerts) | `0.0.0.0/0` (public, no auth — see note) |
+| 9090 | TCP | Prometheus (metrics scraping + query UI) | `0.0.0.0/0` (public) |
+
+> **Note:** Grafana is exposed publicly for demo purposes. In a production environment, restrict port 3000 to your operator IP or put it behind an authenticated reverse proxy.
+
+---
+
+## Why AWS EC2?
+
+EC2 was chosen for the following reasons:
+
+1. **Free-tier eligible.** The `t2.micro` (1 vCPU, 1 GB RAM) is free for 750 hours/month for 12 months — enough for continuous 24/7 operation at no cost during the evaluation period.
+
+2. **Single-instance simplicity matches the prototype scope.** This service intentionally uses in-memory state (`ConcurrentHashMap` + `AtomicReference`). A single EC2 instance is the correct deployment target for in-memory rate limiting — no distributed state is needed. Adding a load balancer or auto-scaling group would require an external store (Redis) to avoid independent token budgets per instance, which is intentionally out of scope for this challenge (see the [Storage trade-off](../rate-limiter/DESIGN.md#trade-offs) section).
+
+3. **Full control over the runtime environment.** EC2 gives direct access to the JVM flags (`-XX:+UseZGC`, `-Xmx256m`), the Docker daemon, and the Compose stack — unlike managed PaaS platforms (ECS, App Runner, Heroku) which abstract these away.
+
+4. **Region: `sa-east-1` (São Paulo).** Chosen for proximity to the submission audience. Low network latency produces accurate `Retry-After` header values in live demos.
+
+5. **Automated CD pipeline.** The `.github/workflows/cd.yml` workflow SSH-deploys the latest build on every merge to `master`, keeping the live instance always current without manual intervention.
+
+---
+
 ## Local (Docker Compose)
 
 **Prerequisites:** Docker with the Compose plugin installed.

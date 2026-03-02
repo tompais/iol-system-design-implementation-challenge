@@ -76,6 +76,145 @@ fun interface BucketStore {
 
 ---
 
+## Configuration Reference (`application.yaml`)
+
+The two tuneable parameters live under the `rate-limiter` prefix and map to `TokenBucketConfig`:
+
+```yaml
+rate-limiter:
+  capacity: 10              # maximum tokens a bucket can hold
+  refill-rate-per-second: 5 # tokens added per second (lazy, computed on each request)
+```
+
+| Parameter | Type | Default | Effect |
+|---|---|---|---|
+| `capacity` | `Long` | `10` | Sets the burst ceiling. A fresh bucket starts full. After exhaustion a client must wait for at least `1 / refillRatePerSecond` seconds before the next token is available. Raising capacity allows larger bursts; lowering it restricts them. |
+| `refill-rate-per-second` | `Long` | `5` | How quickly tokens regenerate. At 5 tokens/sec, one token is added every 200 ms. A client that is idle for 2 seconds earns 10 tokens (capped at `capacity`). Raising the rate makes the limiter more lenient under sustained traffic; lowering it makes it stricter. |
+
+**Example: strict API key protection**
+
+```yaml
+rate-limiter:
+  capacity: 3
+  refill-rate-per-second: 1
+```
+
+With these settings a client may burst 3 requests immediately, then is limited to 1 request/sec. The `Retry-After` header on the 4th request reports `1` second.
+
+**Example: generous tier for batch clients**
+
+```yaml
+rate-limiter:
+  capacity: 100
+  refill-rate-per-second: 50
+```
+
+100-request bursts are allowed; the bucket refills at 50 tokens/sec (one token every 20 ms).
+
+---
+
+## Kotlin Language Patterns
+
+This section explains Kotlin-specific constructs used in the implementation for developers familiar with OOP but new to Kotlin.
+
+### `@JvmInline value class` — `RateLimitKey`
+
+```kotlin
+@JvmInline
+value class RateLimitKey(val value: String)
+```
+
+A `value class` wraps a single primitive or object but is **erased at the JVM bytecode level** — at runtime it is represented directly as the wrapped type (here, a `String`) with zero object allocation overhead. Compare to a regular wrapper class which always allocates a heap object.
+
+`@JvmInline` triggers the JVM erasure. Without it the wrapper exists as a full object.
+
+**Why use it for `RateLimitKey`?**
+- Every HTTP request creates a `RateLimitKey` from the request body's `key` field. Using a plain `String` everywhere would allow accidental misuse (passing a user ID where a request ID is expected). The value class provides **compile-time type safety at zero runtime cost**.
+- `ConcurrentHashMap` key lookup uses `equals` and `hashCode`. `value class` delegates both to the wrapped `String`, so map performance is identical to using a raw `String` key.
+
+### `data class` — `BucketState` and `TokenBucketConfig`
+
+```kotlin
+data class BucketState(val milliTokens: Long, val lastRefillAt: Long)
+```
+
+A `data class` auto-generates `equals`, `hashCode`, `toString`, and `copy`. The `copy` method is critical for the CAS loop:
+
+```kotlin
+val next = refilled.copy(milliTokens = refilled.milliTokens - ONE_MILLI_TOKEN)
+```
+
+`copy` creates a **new immutable instance** with one field changed, leaving the original unchanged. This is the correct pattern for CAS — `compareAndSet(current, next)` requires `current` and `next` to be distinct objects. Mutating `current` in place would break the atomicity guarantee.
+
+### `fun interface` — `Clock`
+
+```kotlin
+fun interface Clock {
+    fun nowMillis(): Long
+}
+```
+
+A `fun interface` (Kotlin's SAM — Single Abstract Method — interface) allows any lambda with the matching signature to be used as a `Clock` without a named class:
+
+```kotlin
+// Production: SystemClock object
+val clock: Clock = SystemClock
+
+// Test: lambda stub
+val clock = Clock { fixedTime }   // equivalent to Clock { -> fixedTime }
+```
+
+This is identical in concept to Java's `@FunctionalInterface`. The `fun` keyword is what enables the lambda syntax on the call site. Without it, test code would require a verbose anonymous object (`object : Clock { override fun nowMillis() = fixedTime }`).
+
+### `object` — `SystemClock` (Kotlin singleton)
+
+```kotlin
+object SystemClock : Clock {
+    override fun nowMillis(): Long = System.nanoTime() / 1_000_000
+}
+```
+
+`object` declares a class and its single instance in one statement — the Kotlin equivalent of the Singleton pattern with guaranteed thread-safe initialization (backed by the JVM class loader). No `companion object`, no `getInstance()` method, no `static` field.
+
+### `suspend fun` — Coroutines in the handler
+
+```kotlin
+suspend fun check(request: ServerRequest): ServerResponse { ... }
+```
+
+`suspend fun` marks a function that can be paused and resumed without blocking a thread. In this service, `request.awaitBody<RateLimitRequest>()` suspends while the request body is read from the network — the underlying Netty thread is released and available for other requests during that wait. This is the Kotlin Coroutines model for non-blocking I/O, which integrates with Spring WebFlux's `Reactor` event loop. Non-`suspend` blocking code in a handler would hold the Netty thread, degrading throughput under load.
+
+---
+
+## Glossary
+
+| Term | Definition |
+|---|---|
+| **Token Bucket** | A rate limiting algorithm where requests consume tokens from a bucket. The bucket refills at a fixed rate up to a maximum capacity. A request is allowed only if at least one token is available. |
+| **Bucket** | The per-key state holding the current token count and the timestamp of the last refill. Each unique `key` in the request body gets its own independent bucket. |
+| **Token** | A unit of request capacity. One token = permission to make one request. Stored internally as 1000 milliTokens for integer arithmetic precision. |
+| **milliToken** | Internal representation: 1 token = 1000 milliTokens. Enables sub-token precision (e.g., at 5 tokens/sec, 100ms earns exactly 500 milliTokens) without floating-point arithmetic. |
+| **Capacity** | The maximum number of tokens a bucket can hold (`rate-limiter.capacity`). Determines the maximum burst size. |
+| **Refill rate** | Tokens added per second (`rate-limiter.refill-rate-per-second`). Controls the sustained throughput ceiling. |
+| **Lazy refill** | Refill is computed on each `tryConsume()` call from elapsed time — not by a background thread. The bucket's current balance is always `min(previous + earned, capacity)` at the moment of the request. |
+| **CAS (Compare-And-Swap)** | An atomic CPU instruction (exposed in Java as `AtomicReference.compareAndSet`). Writes a new value only if the current value equals an expected value — otherwise it fails and the caller retries. Used here to update `BucketState` without locks. |
+| **TOCTOU (Time-Of-Check-Time-Of-Use)** | A race condition where a value is checked (tokens available?) and then used (tokens subtracted), but another thread modifies the value between the check and the use. The CAS loop eliminates this by making check and use a single atomic operation. |
+| **Lock-free** | A concurrency strategy that does not use mutexes or blocking primitives (`synchronized`, `ReentrantLock`). Threads never block waiting for each other — they retry on collision. Enables higher throughput under contention compared to locking. |
+| **Hexagonal Architecture** | Also called Ports and Adapters. The business logic (`core/`) depends only on interfaces (ports). External frameworks (Spring, HTTP) live in adapters and plug into those interfaces. The core can be tested and reasoned about independently of any framework. |
+| **Port** | An interface in `core/port/` that abstracts an external concern (time: `Clock`; state: `BucketStore`; the algorithm itself: `RateLimiterPort`). |
+| **Adapter** | An implementation of a port that uses a specific technology (`SystemClock` wraps `System.nanoTime()`; `InMemoryBucketStore` wraps `ConcurrentHashMap`). |
+| **coRouter** | Spring WebFlux's Kotlin coroutine DSL for declaring HTTP routes (`coRouter { POST("/path", handler::fn) }`). Unlike `@RestController`, it keeps routing and request handling in separate classes. |
+| **Monotonic clock** | A clock that only moves forward, unaffected by NTP adjustments or manual time changes. `System.nanoTime()` is monotonic. `System.currentTimeMillis()` is a wall clock and can step backward during NTP corrections, which would cause negative elapsed time and therefore negative token refill without the `maxOf(0L, ...)` guard. |
+| **`Retry-After`** | An HTTP response header (RFC 7231) that tells the client how many seconds to wait before retrying. Returned with HTTP 429. Computed via ceiling division to ensure the value is always ≥ 1 second. |
+| **`@JvmInline value class`** | A Kotlin construct that wraps a single value with a distinct type for compile-time safety, but is erased to the wrapped type at the JVM level — zero allocation overhead. |
+| **`data class`** | A Kotlin class that auto-generates `equals`, `hashCode`, `toString`, and `copy`. The `copy` method is essential for immutable CAS updates. |
+| **`fun interface` (SAM)** | A Kotlin interface with a single abstract method. Enables lambda syntax on the call site. Used for `Clock` to allow test stubs as one-liners (`Clock { fixedTime }`). |
+| **`object`** | Kotlin's built-in singleton declaration. Creates a class and its single thread-safe instance in one statement. Used for `SystemClock`. |
+| **`suspend fun`** | A Kotlin coroutine function that can suspend (yield the thread) without blocking. Used in WebFlux handlers for non-blocking I/O. |
+| **CountDownLatch** | A Java synchronization primitive used in `TokenBucketConcurrencyTest`. Initialized to 1, it holds all 100 threads at a gate until `countDown()` is called, maximising contention for the race test. |
+
+---
+
 ## How AI Was Used
 
 This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 7 pull requests (PR 0 + Increments 2–6).

@@ -131,16 +131,40 @@ See [`docs/testing.md`](docs/testing.md) for the full TDD approach and test pyra
 
 ---
 
+## Live Service
+
+The service is running 24/7 on AWS EC2 (`sa-east-1`):
+
+| Endpoint | URL |
+|----------|-----|
+| API | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/rate-limit/check` |
+| Swagger UI | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/swagger-ui.html` |
+| Grafana | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:3000` |
+
+```bash
+curl -X POST http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/rate-limit/check \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"demo-user"}'
+# → 200 {"allowed":true}
+```
+
+See [`docs/deployment.md`](docs/deployment.md) for port mapping, the "Why EC2" rationale, and the automated CD pipeline.
+
+---
+
 ## Live Demo
 
 A [k6](https://k6.io) script exercises the rate limiter end-to-end: single request, bucket exhaustion, validation errors (missing key, blank key), and 100-VU concurrency burst.
 
 ```bash
-# 1. Start the app
+# 1. Start the app (or point BASE_URL at the live instance)
 docker compose up
 
 # 2. Run the demo (requires k6)
 k6 run demo/rate-limiter-demo.js
+
+# Against the live EC2 instance:
+BASE_URL=http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080 k6 run demo/rate-limiter-demo.js
 ```
 
 See [`demo/README.md`](demo/README.md) for details on all 5 scenarios and expected output.
