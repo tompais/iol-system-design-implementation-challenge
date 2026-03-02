@@ -7,6 +7,7 @@ import org.springframework.web.server.ServerWebExchange
 import org.springframework.web.server.WebFilter
 import org.springframework.web.server.WebFilterChain
 import reactor.core.publisher.Mono
+import java.util.concurrent.TimeUnit
 
 /**
  * Captures HTTP metrics for WebFlux Functional Router endpoints.
@@ -21,7 +22,6 @@ import reactor.core.publisher.Mono
  * - method: HTTP method (GET, POST, etc)
  * - uri: request path
  * - status: HTTP response status code
- * - exception: exception class name (if any)
  */
 class MetricsFilter(
     private val meterRegistry: MeterRegistry,
@@ -32,7 +32,7 @@ class MetricsFilter(
     ): Mono<Void> {
         val startNs = System.nanoTime()
         val request = exchange.request
-        val method = request.method?.name ?: "UNKNOWN"
+        val method = request.method.toString()
         val path = request.uri.path
 
         return chain
@@ -53,7 +53,7 @@ class MetricsFilter(
                     .tag("status", statusCode)
                     .publishPercentiles(0.5, 0.95, 0.99)
                     .register(meterRegistry)
-                    .record(elapsedSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                    .record(elapsedNs, TimeUnit.NANOSECONDS)
 
                 log.debug("Recorded metrics - method=$method uri=$path status=$statusCode duration=${elapsedSeconds}s")
             }
