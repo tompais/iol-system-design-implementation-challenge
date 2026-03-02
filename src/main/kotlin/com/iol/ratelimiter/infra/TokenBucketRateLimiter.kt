@@ -7,6 +7,7 @@ import com.iol.ratelimiter.core.domain.TokenBucketConfig
 import com.iol.ratelimiter.core.port.BucketStore
 import com.iol.ratelimiter.core.port.Clock
 import com.iol.ratelimiter.core.port.RateLimiterPort
+import org.slf4j.LoggerFactory
 
 private const val ONE_MILLI_TOKEN = 1_000L
 private const val MS_PER_SECOND = 1_000L
@@ -36,10 +37,17 @@ class TokenBucketRateLimiter(
         while (true) {
             val current = ref.get()
             val refilled = computeRefill(current)
-            if (refilled.milliTokens < ONE_MILLI_TOKEN) throw RateLimitDeniedException(retryAfterSeconds(refilled))
+            if (refilled.milliTokens < ONE_MILLI_TOKEN) {
+                val retryAfter = retryAfterSeconds(refilled)
+                log.info("denied key={} retryAfter={}s", key.value, retryAfter)
+                throw RateLimitDeniedException(retryAfter)
+            }
             val next = refilled.copy(milliTokens = refilled.milliTokens - ONE_MILLI_TOKEN)
             // CAS: if state changed between read and write, retry with fresh read
-            if (ref.compareAndSet(current, next)) return
+            if (ref.compareAndSet(current, next)) {
+                log.debug("allowed key={} remainingMilliTokens={}", key.value, next.milliTokens)
+                return
+            }
         }
     }
 
@@ -66,5 +74,9 @@ class TokenBucketRateLimiter(
         // Seconds needed = ceil(msNeeded / 1000) — always ≥ 1 for integer rates ≥ 1.
         val msNeeded = (missingMilliTokens + config.refillRatePerSecond - 1) / config.refillRatePerSecond
         return (msNeeded + MS_PER_SECOND - 1L) / MS_PER_SECOND
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(TokenBucketRateLimiter::class.java)
     }
 }
