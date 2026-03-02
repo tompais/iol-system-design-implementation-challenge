@@ -76,6 +76,22 @@ fun interface BucketStore {
 
 ---
 
+## Observability
+
+The service exports metrics, distributed traces, and structured logs through three independent pipelines, all consumed by a `grafana/otel-lgtm` container in the Docker Compose stack.
+
+**Metrics (OTLP push):** `micrometer-registry-otlp` pushes all registered Micrometer meters — JVM heap, GC pauses, HTTP server request duration — to the OTLP HTTP receiver at `grafana-lgtm:4318/v1/metrics` every 10 seconds (`management.otlp.metrics.export.step=10s`). The OTEL Collector inside the LGTM container forwards these to Prometheus, where Grafana's JVM Overview dashboard can query them. `micrometer-registry-prometheus` is also on the classpath, so `/actuator/prometheus` is available for direct Prometheus scraping.
+
+**Traces (OTLP gRPC):** `spring-boot-starter-opentelemetry` configures Micrometer Tracing with the OTel bridge (`micrometer-tracing-bridge-otel`). Traces are exported via OTLP gRPC to `grafana-lgtm:4317`. Sampling is set to 100% (`spring.otel.tracing.sampling.probability=1.0`) so every request produces a trace in Tempo.
+
+**Structured logs (Log4j2 + MDC):** The pattern `traceId=%X{traceId} spanId=%X{spanId}` relies on Micrometer Tracing's MDC bridge, which writes the active span's IDs into Log4j2's `ThreadContext` on each request. The keys `traceId` and `spanId` are the default keys used by both the OTel bridge and the (legacy-compatible) Brave bridge — the pattern is correct for both. In WebFlux coroutine handlers, Spring Boot's Reactor instrumentation propagates the observation context through the reactive pipeline, ensuring MDC is populated on every thread that processes a request.
+
+**Request/response logging:** `RequestLoggingFilter` (a `WebFilter` registered as a plain bean in `RateLimiterConfig`) logs the HTTP method and path on entry (`> POST /api/rate-limit/check`) and the status code with elapsed milliseconds on completion (`< POST /api/rate-limit/check 200 (3ms)`). Because the filter runs inside the Reactor/Netty pipeline where the span is already active, these log lines automatically carry the `traceId` and `spanId` MDC values.
+
+**Rate-limiter operational logs:** `TokenBucketRateLimiter` logs at `DEBUG` on each denied request (key + `retryAfter` seconds) and at `DEBUG` on each allowed request (key + remaining milliTokens). Both log levels are suppressed by default and can be enabled by setting the `com.iol.ratelimiter.infra.TokenBucketRateLimiter` logger to `DEBUG` in the logging configuration.
+
+---
+
 ## Configuration Reference (`application.yaml`)
 
 The two tuneable parameters live under the `rate-limiter` prefix and map to `TokenBucketConfig`:
@@ -217,11 +233,11 @@ suspend fun check(request: ServerRequest): ServerResponse { ... }
 
 ## How AI Was Used
 
-This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 7 pull requests (PR 0 + Increments 2–6).
+This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 8 pull requests (PR 0 + Increments 2–6 + observability PR).
 
 **Planning phase:** The developer reviewed the challenge requirements (`CHALLENGE.md`) and approved a detailed implementation plan including algorithm choice rationale, the `milliTokens` integer-CAS design, the `@JvmInline value class` for type-safe keys, the concurrency test design with `CountDownLatch`, and the 6-increment delivery sequence. Each design decision was discussed and understood before the plan was approved.
 
-**Implementation:** Claude generated source files following the approved plan in a strict RED → GREEN → REFACTOR TDD cycle: failing tests were committed first, then production code. Key technical decisions made during implementation — the `retryAfterSeconds` two-step ceiling division, the exception-based thin handler (`RateLimitDeniedException` + `@RestControllerAdvice`), the `LocalValidatorFactoryBean` for standalone test validation, and the Log4j2 conflict resolution (excluding `log4j-to-slf4j` + `spring-boot-starter-logging`) — were each reviewed and understood by the developer before commit.
+**Implementation:** Claude generated source files following the approved plan in a strict RED → GREEN → REFACTOR TDD cycle: failing tests were committed first, then production code. Key technical decisions made during implementation — the `retryAfterSeconds` two-step ceiling division, the exception-based thin handler (`RateLimitDeniedException` + `@RestControllerAdvice`), the `LocalValidatorFactoryBean` for standalone test validation, the Log4j2 conflict resolution (excluding `log4j-to-slf4j` + `spring-boot-starter-logging`), and the observability configuration (OTLP step interval, MDC key verification, `RequestLoggingFilter`, rate-limiter operational logs) — were each reviewed and understood by the developer before commit.
 
 **Tooling:** Claude Code was configured with project-specific automations:
 - **ktlint-format-on-save hook** — auto-formats Kotlin files before detekt runs
