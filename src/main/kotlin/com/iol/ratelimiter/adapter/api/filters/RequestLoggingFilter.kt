@@ -11,6 +11,13 @@ class RequestLoggingFilter : WebFilter {
         exchange: ServerWebExchange,
         chain: WebFilterChain,
     ): Mono<Void> {
+        val path = exchange.request.uri.path
+
+        // Excluir rutas de OpenAPI, Swagger y Actuator de los logs
+        if (ExcludedPaths.isExcluded(path)) {
+            return chain.filter(exchange)
+        }
+
         val startNs = System.nanoTime()
         val request = exchange.request
         log.info("> {} {}", request.method, request.uri.path)

@@ -106,13 +106,24 @@ SpringDoc OpenAPI is auto-configured. Once the app is running:
 
 ## Observability
 
-The app ships with a `compose.yaml` that starts:
+The app ships with a `compose.yaml` that starts a complete observability stack:
 
-- **Grafana** — http://localhost:3000 (dashboards)
-- **Prometheus** — http://localhost:9090 (metrics scraping)
-- **OpenTelemetry Collector** — traces forwarded from the app
+- **Grafana** — http://localhost:3000 (pre-configured dashboards)
+- **Prometheus** — http://localhost:9090 (metrics scraping every 10s)
+- **Tempo** — Distributed tracing backend
+- **Loki** — Log aggregation
+- **OpenTelemetry Collector** — OTLP receiver (gRPC + HTTP)
 
-Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern (`log4j2-spring.xml`).
+Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern. All three signals (logs, traces, metrics) are **automatically correlated** in Grafana.
+
+**Getting started:** See [`docs/quick-start.md`](docs/quick-start.md) for quick-start guide and [`docs/observability.md`](docs/observability.md) for in-depth architecture and troubleshooting.
+
+**Dashboard:** A pre-built Grafana dashboard (`grafana/dashboards/rate-limiter-metrics.json`) includes:
+- HTTP request latency, rate, and rate-limit rejections
+- JVM memory, threads, CPU, and GC metrics
+- Real-time gauges for critical KPIs
+
+The dashboard is **auto-provisioned** on `docker compose up` thanks to Grafana provisioning files in `grafana/provisioning/`.
 
 ---
 
@@ -174,6 +185,31 @@ See [`demo/README.md`](demo/README.md) for details on all 5 scenarios and expect
 ## Design Document
 
 [`rate-limiter/DESIGN.md`](rate-limiter/DESIGN.md) — required submission artifact. Covers algorithm choice, thread-safety model, key design decisions, trade-offs, and AI usage.
+
+---
+
+## Documentation
+
+For comprehensive documentation on setup, architecture, testing, and observability, refer to:
+
+| Document | Purpose |
+|----------|---------|
+| [docs/quick-start.md](docs/quick-start.md) | **Quick start**: 3 pasos para ver métricas en Grafana |
+| [docs/architecture.md](docs/architecture.md) | Sistema arquitectónico hexagonal |
+| [docs/development.md](docs/development.md) | Guía de desarrollo local |
+| [docs/testing.md](docs/testing.md) | Estrategia TDD y test pyramid |
+| [docs/deployment.md](docs/deployment.md) | Deployment en AWS EC2 |
+| [docs/observability.md](docs/observability.md) | Guía completa: logs, traces, métricas |
+| [docs/metrics-reference.md](docs/metrics-reference.md) | Catálogo de 100+ métricas + PromQL queries |
+| [grafana/README.md](grafana/README.md) | Setup de dashboards e importación |
+
+### Quick Navigation
+
+- **Comenzar rápido**: [`docs/quick-start.md`](docs/quick-start.md)
+- **Entender arquitectura**: [`docs/architecture.md`](docs/architecture.md)
+- **Ver métricas disponibles**: [`docs/metrics-reference.md`](docs/metrics-reference.md)
+- **Configurar alertas**: [`docs/observability.md`](docs/observability.md)
+- **Deployar a producción**: [`docs/deployment.md`](docs/deployment.md)
 
 ---
 

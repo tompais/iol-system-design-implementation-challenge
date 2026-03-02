@@ -49,6 +49,7 @@ The two main candidates were Token Bucket and Sliding Window Counter. Token Buck
 | HTTP error mapping | `@RestControllerAdvice` + custom exception | `when` expression inline in handler |
 | Request validation | `BodyValidator` throws `BadRequestException` | Jakarta Validation filter / MVC binding |
 | Clock source | `System.nanoTime()` (monotonic) | `System.currentTimeMillis()` (wall-clock, non-monotonic) |
+| HTTP request metrics | Explicit `HttpRequestMetricsFilter` WebFilter | Rely on `ServerHttpObservationFilter` (breaks for `coRouter` — no URI template) |
 | Performance testing | k6 run in CI after build (5 scenarios, 100% check thresholds) | Manual smoke test only |
 
 ### Storage: In-Memory vs Redis
@@ -83,7 +84,9 @@ The service exports metrics, distributed traces, and structured logs through thr
 
 **Metrics (OTLP push):** `micrometer-registry-otlp` pushes all registered Micrometer meters — JVM heap, GC pauses, HTTP server request duration — to the OTLP HTTP receiver at `grafana-lgtm:4318/v1/metrics` every 10 seconds (`management.otlp.metrics.export.step=10s`). The OTEL Collector inside the LGTM container forwards these to Prometheus, where Grafana's JVM Overview dashboard can query them. `micrometer-registry-prometheus` is also on the classpath, so `/actuator/prometheus` is available for direct Prometheus scraping.
 
-**Traces (OTLP gRPC):** `spring-boot-starter-opentelemetry` configures Micrometer Tracing with the OTel bridge (`micrometer-tracing-bridge-otel`). Traces are exported via OTLP gRPC to `grafana-lgtm:4317`. Sampling is set to 100% (`spring.otel.tracing.sampling.probability=1.0`) so every request produces a trace in Tempo.
+**HTTP request metrics — explicit `WebFilter`:** Spring Boot's `ServerHttpObservationFilter` (auto-configured by `WebFluxObservationAutoConfiguration`) creates Micrometer observations for each request, but it derives the `uri` tag from a URI-template annotation. WebFlux Functional (`coRouter`) routes carry no such annotation, so the filter falls back to `/UNKNOWN` and suppresses the metric entirely. To close this gap, `HttpRequestMetricsFilter` (a plain `WebFilter` bean wired in `RateLimiterConfig`) records an `http.server.requests` `Timer` directly against the `MeterRegistry` after every request completes, tagging it with `method`, `uri` (raw request path — acceptable because there are no path variables in this service), `status` (HTTP status code), and `outcome` (one of `INFORMATIONAL`, `SUCCESSFUL`, `REDIRECTION`, `CLIENT_ERROR`, `SERVER_ERROR`). This makes per-endpoint latency and error-rate panels available in Grafana via both the OTLP push pipeline and the `/actuator/prometheus` scrape endpoint.
+
+**Traces (OTLP gRPC):** `spring-boot-starter-opentelemetry` configures Micrometer Tracing with the OTel bridge (`micrometer-tracing-bridge-otel`). Traces are exported via OTLP gRPC to `grafana-lgtm:4317`. Sampling is set to 100% (`management.tracing.sampling.probability=1.0`) so every request produces a trace in Tempo.
 
 **Structured logs (Log4j2 + MDC):** The pattern `traceId=%X{traceId} spanId=%X{spanId}` relies on Micrometer Tracing's MDC bridge, which writes the active span's IDs into Log4j2's `ThreadContext` on each request. The keys `traceId` and `spanId` are the default keys used by both the OTel bridge and the (legacy-compatible) Brave bridge — the pattern is correct for both. In WebFlux coroutine handlers, Spring Boot's Reactor instrumentation propagates the observation context through the reactive pipeline, ensuring MDC is populated on every thread that processes a request.
 
