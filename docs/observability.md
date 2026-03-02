@@ -138,7 +138,7 @@ management:
 
 ### Variables de Entorno
 
-En `docker-compose.yaml`:
+En `compose.yaml`:
 
 ```yaml
 environment:
