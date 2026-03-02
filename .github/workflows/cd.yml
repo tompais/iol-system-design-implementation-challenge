@@ -15,23 +15,25 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
       - name: Add EC2 host to known_hosts
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy to EC2
         env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           REPO_PATH: ${{ secrets.EC2_REPO_PATH }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         run: |
-          ssh -o StrictHostKeyChecking=yes \
+          KEY_FILE=$(mktemp)
+          chmod 600 "$KEY_FILE"
+          printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          ssh -o StrictHostKeyChecking=yes -i "$KEY_FILE" \
             "${EC2_USERNAME}@${EC2_HOST}" \
             "REPO_PATH=$(printf '%q' "$REPO_PATH") bash -s" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
