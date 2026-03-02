@@ -43,7 +43,7 @@ Dashboard comprehensivo que incluye:
 
 ### Opción 2: Usando Docker Compose (Automático)
 
-El archivo `docker-compose.yaml` incluye un volumen montado que permite a Grafana cargar automáticamente los dashboards:
+El archivo `compose.yaml` incluye un volumen montado que permite a Grafana cargar automáticamente los dashboards:
 
 ```yaml
 volumes:
