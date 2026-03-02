@@ -93,8 +93,8 @@ management:
    - Puerto 8080 (mismo que la app).
    - Consumida por Prometheus cada 10 segundos (ver `prometheus.yaml`).
 
-2. **OTLP Registry** (puerto 4317 gRPC):
-   - Exporta a Grafana LGTM.
+2. **OTLP Metrics Registry** (puerto 4318 HTTP):
+   - Exporta métricas vía OTLP HTTP a Grafana LGTM (el endpoint gRPC/4317 se usa para traces/logs).
    - Redundante con Prometheus, pero útil para escalar a múltiples Grafanas.
 
 ---
