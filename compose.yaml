@@ -7,6 +7,8 @@ services:
       - '9090:9090'
       - '4317:4317'
       - '4318:4318'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - observability
 
@@ -16,13 +18,10 @@ services:
     ports:
       - '8080:8080'
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-lgtm:4317
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_SERVICE_NAME: rate-limiter
-      # Micrometer's OTLP registry uses HTTP/protobuf; port 4317 is gRPC-only.
-      # Override the URL it derives from OTEL_EXPORTER_OTLP_ENDPOINT to use port 4318.
-      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://grafana-lgtm:4318/v1/metrics
-      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://grafana-lgtm:4317/v1/traces
+      # Traces are sent to Zipkin endpoint (port 9411) via Brave reporter
+      # Metrics are exported via Prometheus Registry at /actuator/prometheus
+      # Prometheus will scrape this endpoint via docker network
     depends_on:
       - grafana-lgtm
     networks:

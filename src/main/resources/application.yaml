@@ -42,8 +42,5 @@ management:
         step: 10s
   otlp:
     tracing:
-      endpoint: http://localhost:4317/v1/traces
-    metrics:
-      export:
-        url: http://localhost:4318/v1/metrics
-        step: 10s
+      # Zipkin endpoint for distributed tracing (Brave reporter)
+      endpoint: http://localhost:9411

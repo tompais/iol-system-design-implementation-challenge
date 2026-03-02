@@ -106,13 +106,16 @@ SpringDoc OpenAPI is auto-configured. Once the app is running:
 
 ## Observability
 
-The app ships with a `compose.yaml` that starts:
+The app ships with a `compose.yaml` that starts the LGTM stack (Loki, Grafana, Tempo, Prometheus):
 
 - **Grafana** — http://localhost:3000 (dashboards)
-- **Prometheus** — http://localhost:9090 (metrics scraping)
-- **OpenTelemetry Collector** — traces forwarded from the app
+- **Prometheus** — http://localhost:9090 (metrics scraping from `/actuator/prometheus`)
+- **Tempo** — trace storage (no UI, accessed via Grafana)
+- **Loki** — log aggregation (optional)
 
-Traces include `traceId` and `spanId` in every log line via the Log4j2 pattern (`log4j2-spring.xml`).
+**Metrics** are exported via Micrometer Prometheus Registry and scraped by Prometheus every 10 seconds. **Traces** are sent via Brave to Zipkin endpoint (port 9411) for distributed tracing across requests.
+
+For detailed setup, architecture, and troubleshooting, see [`docs/observability.md`](docs/observability.md).
 
 ---
 
