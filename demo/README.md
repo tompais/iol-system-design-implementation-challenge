@@ -38,7 +38,7 @@ BASE_URL=http://my-server:8080 k6 run demo/rate-limiter-demo.js
 | `bucket_exhaustion` | 10 requests same key → 11th | first 10: 200 · 11th: 429 + `Retry-After` |
 | `validation_missing_key` | POST `{}` | 400 |
 | `validation_blank_key` | POST `{"key":""}` | 400 |
-| `capacity_enforcement` | CAPACITY×10 (100) sequential requests on same key | first CAPACITY (10): 200 · rest CAPACITY×9 (90): 429 |
+| `capacity_enforcement` | 10×`CAPACITY` sequential requests on same key | ≥ `CAPACITY`: 200 · remaining may be 429 · no unexpected status codes |
 
 ## Expected Output
 
@@ -52,9 +52,10 @@ BASE_URL=http://my-server:8080 k6 run demo/rate-limiter-demo.js
 ✓ exhausted bucket → Retry-After present
 ✓ missing key → 400
 ✓ blank key → 400
-✓ capacity enforcement → expected status (200 or 429)
-✓ 100 requests → exactly 10 allowed
-✓ 100 requests → exactly 90 denied
+✓ at least 10 requests allowed
+✓ at least one request denied (capacity enforced)
+✓ no unexpected HTTP status codes
+✓ all requests accounted for
 
 Rate limiter scenarios completed successfully.
 ```
