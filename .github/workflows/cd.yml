@@ -30,10 +30,10 @@ jobs:
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         run: |
           KEY_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE"' EXIT
           chmod 600 "$KEY_FILE"
           printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          ssh -o StrictHostKeyChecking=yes -i "$KEY_FILE" \
+          ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
             "${EC2_USERNAME}@${EC2_HOST}" \
             "REPO_PATH=$(printf '%q' "$REPO_PATH") bash -s" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
