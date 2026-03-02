@@ -71,7 +71,7 @@ providers:
       path: /etc/grafana/provisioning/dashboards
 ```
 
-Y actualiza el `docker-compose.yaml`:
+Y actualiza el `compose.yaml`:
 
 ```yaml
 grafana-lgtm:
