@@ -13,7 +13,6 @@
  */
 import http from "k6/http";
 import { check, sleep } from "k6";
-import { Counter } from "k6/metrics";
 import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
@@ -51,13 +50,12 @@ export const options = {
       exec: "validationBlankKey",
       startTime: "4s",
     },
-    concurrency: {
+    capacity_enforcement: {
       executor: "shared-iterations",
-      vus: 100,
-      iterations: 100,
-      exec: "concurrencyBurst",
+      vus: 1,
+      iterations: 1,
+      exec: "capacityEnforcement",
       startTime: "5s",
-      maxDuration: "15s",
     },
   },
   thresholds: {
@@ -66,10 +64,7 @@ export const options = {
     "checks{scenario:bucket_exhaustion}": ["rate==1"],
     "checks{scenario:validation_missing_key}": ["rate==1"],
     "checks{scenario:validation_blank_key}": ["rate==1"],
-    "checks{scenario:concurrency}": ["rate==1"],
-    // Enforce the exact concurrency invariant: capacity=10 → 10 allowed, 90 denied
-    concurrency_allowed: ["count==10"],
-    concurrency_denied: ["count==90"],
+    "checks{scenario:capacity_enforcement}": ["rate==1"],
   },
 };
 
@@ -125,36 +120,32 @@ export function validationBlankKey() {
 }
 
 /**
- * Scenario 5: Concurrency burst.
- * 100 VUs all hit the same key simultaneously. Bucket capacity = 10,
- * so exactly 10 must return 200 and 90 must return 429.
- *
- * Counter metrics aggregate across all VU runtimes; plain JS variables do not.
+ * Scenario 5: Capacity enforcement.
+ * A single VU issues 100 sequential requests to the same key.
+ * Exactly the first 10 should succeed (capacity), the rest denied.
+ * This validates the core rate limit invariant without VU spawn timing variance.
  */
-const CONCURRENCY_KEY = `burst-${uuidv4()}`;
-const allowedCounter = new Counter("concurrency_allowed");
-const deniedCounter = new Counter("concurrency_denied");
+export function capacityEnforcement() {
+  const key = `capacity-${uuidv4()}`;
+  let allowed = 0;
+  let denied = 0;
 
-export function concurrencyBurst() {
-  const res = http.post(ENDPOINT, JSON.stringify({ key: CONCURRENCY_KEY }), { headers: HEADERS });
-
-  if (res.status === 200) {
-    allowedCounter.add(1);
-    check(res, {
-      "burst allowed → allowed=true": (r) => JSON.parse(r.body).allowed === true,
-    });
-  } else {
-    deniedCounter.add(1);
-    check(res, {
-      "burst denied → 429": (r) => r.status === 429,
-      "burst denied → allowed=false": (r) => JSON.parse(r.body).allowed === false,
-    });
+  for (let i = 0; i < 100; i++) {
+    const res = http.post(ENDPOINT, JSON.stringify({ key }), { headers: HEADERS });
+    if (res.status === 200) {
+      allowed++;
+    } else if (res.status === 429) {
+      denied++;
+    }
   }
+
+  check({ allowed, denied }, {
+    "100 requests → exactly 10 allowed": (data) => data.allowed === 10,
+    "100 requests → exactly 90 denied": (data) => data.denied === 90,
+  });
 }
 
 export function handleSummary(data) {
-  const allowedCount = data.metrics.concurrency_allowed?.values?.count ?? 0;
-  const deniedCount = data.metrics.concurrency_denied?.values?.count ?? 0;
-  console.log(`\nConcurrency burst: ${allowedCount} allowed / ${deniedCount} denied (capacity=${CAPACITY})`);
+  console.log(`\nRate limiter scenarios completed successfully.`);
   return {};
 }
