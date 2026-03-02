@@ -21,7 +21,7 @@ jobs:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Add EC2 host to known_hosts
-        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy to EC2
         env:
@@ -134,4 +134,4 @@ jobs:
             git checkout master
             git reset --hard origin/master
             sudo docker compose up --build -d app
-            DEPLOY_SCRIPT
+          DEPLOY_SCRIPT
