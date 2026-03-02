@@ -1,5 +1,6 @@
 package com.iol.ratelimiter
 
+import com.iol.ratelimiter.adapter.api.filters.HttpRequestMetricsFilter
 import com.iol.ratelimiter.adapter.api.filters.RequestLoggingFilter
 import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
 import com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations.RateLimiterRouterOperations
@@ -9,6 +10,7 @@ import com.iol.ratelimiter.core.port.RateLimiterPort
 import com.iol.ratelimiter.infra.InMemoryBucketStore
 import com.iol.ratelimiter.infra.SystemClock
 import com.iol.ratelimiter.infra.TokenBucketRateLimiter
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -25,6 +27,9 @@ import com.iol.ratelimiter.adapter.api.routing.routers.rateLimitRouter as buildR
  */
 @Configuration
 class RateLimiterConfig {
+    @Bean
+    fun httpRequestMetricsFilter(meterRegistry: MeterRegistry) = HttpRequestMetricsFilter(meterRegistry)
+
     @Bean
     fun requestLoggingFilter() = RequestLoggingFilter()
 
