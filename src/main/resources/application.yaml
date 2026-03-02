@@ -40,7 +40,7 @@ management:
     metrics:
       export:
         step: 10s
-  otlp:
+  # Brave tracing: send traces to Zipkin endpoint (port 9411 in LGTM stack)
+  zipkin:
     tracing:
-      # Zipkin endpoint for distributed tracing (Brave reporter)
-      endpoint: http://localhost:9411
+      endpoint: http://localhost:9411/api/v2/spans

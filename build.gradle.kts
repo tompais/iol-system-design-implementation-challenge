@@ -52,6 +52,7 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-micrometer-tracing-brave")
+    implementation("io.zipkin.reporter2:zipkin-reporter-brave")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-log4j2")
     implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
