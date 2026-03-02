@@ -218,9 +218,9 @@ suspend fun check(request: ServerRequest): ServerResponse { ... }
 
 ## How AI Was Used
 
-This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 8 pull requests (PR 0 + Increments 2–6, plus the K6 CI integration).
+This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 7 pull requests (PR 0 + Increments 2–6, plus the K6 CI integration).
 
-**Planning phase:** The developer reviewed the challenge requirements (`CHALLENGE.md`) and approved a detailed implementation plan including algorithm choice rationale, the `milliTokens` integer-CAS design, the `@JvmInline value class` for type-safe keys, the concurrency test design with `CountDownLatch`, and the 6-increment delivery sequence. Each design decision was discussed and understood before the plan was approved.
+**Planning phase:** The developer reviewed the challenge requirements (`CHALLENGE.md`) and approved a detailed implementation plan including algorithm choice rationale, the `milliTokens` integer-CAS design, the `@JvmInline value class` for type-safe keys, the concurrency test design with `CountDownLatch`, and the 5-increment delivery sequence. Each design decision was discussed and understood before the plan was approved.
 
 **Implementation:** Claude generated source files following the approved plan in a strict RED → GREEN → REFACTOR TDD cycle: failing tests were committed first, then production code. Key technical decisions made during implementation — the `retryAfterSeconds` two-step ceiling division, the exception-based thin handler (`RateLimitDeniedException` + `@RestControllerAdvice`), the `LocalValidatorFactoryBean` for standalone test validation, and the Log4j2 conflict resolution (excluding `log4j-to-slf4j` + `spring-boot-starter-logging`) — were each reviewed and understood by the developer before commit. The CI pipeline was extended with a mandatory `k6` job: the `build` job uploads the Spring Boot fat JAR as a GitHub Actions artifact; the `k6` job downloads it, starts the app, installs k6, polls `/actuator/health`, and runs all five k6 scenarios — any threshold failure fails the CI run and blocks the CD workflow.
 

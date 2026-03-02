@@ -24,7 +24,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
-          path: build/libs/sd-implementation-challenge-*.jar
+          path: |
+            build/libs/sd-implementation-challenge-*.jar
+            !build/libs/sd-implementation-challenge-*-plain.jar
 
   k6:
     needs: build
@@ -41,7 +43,17 @@ jobs:
           name: app-jar
           path: build/libs
       - name: Start application in background
-        run: nohup java -jar build/libs/sd-implementation-challenge-*.jar > /tmp/app.log 2>&1 &
+        run: |
+          JAR=$(ls build/libs/sd-implementation-challenge-*.jar 2>/dev/null | grep -v -- '-plain\.jar' | head -1)
+          if [ -z "$JAR" ]; then
+            echo "No application JAR found in build/libs (excluding *-plain.jar)"
+            ls -l build/libs || true
+            exit 1
+          fi
+          # Refill rate is pinned to 1 token/sec for CI to make denial checks time-independent.
+          # At this rate, all 10 sequential exhaustion requests would need to span >1 s to earn
+          # an extra token — impossible on a localhost connection — so scenarios are deterministic.
+          nohup java -jar "$JAR" --rate-limiter.refill-rate-per-second=1 > /tmp/app.log 2>&1 &
       - name: Install k6
         run: |
           sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
@@ -49,7 +61,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
             | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update
-          sudo apt-get install k6
+          sudo apt-get install -y --no-install-recommends k6
       - name: Wait for application to be ready
         run: |
           for i in $(seq 1 30); do
