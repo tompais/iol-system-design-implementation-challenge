@@ -16,12 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Add EC2 host to known_hosts
-        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Deploy to EC2
         env:
@@ -29,8 +31,9 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              "${EC2_USERNAME}@${EC2_HOST}" << 'DEPLOY_SCRIPT'
+          ssh -o StrictHostKeyChecking=yes \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "REPO_PATH=$(printf '%q' "$REPO_PATH") bash -s" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
 
             # Versiones pinneadas para garantizar reproducibilidad y verificación de integridad.
@@ -45,10 +48,26 @@ jobs:
               *) echo "Arquitectura no soportada: $ARCH" >&2; exit 1 ;;
             esac
 
+            # Detecta el package manager (apt-get para Debian/Ubuntu, yum para Amazon Linux/RHEL).
+            if command -v apt-get &>/dev/null; then
+              PKG_MANAGER="apt-get"
+              PKG_UPDATE="sudo apt-get update"
+              PKG_INSTALL="sudo apt-get install -y"
+              DOCKER_PKG="docker.io"
+            elif command -v yum &>/dev/null; then
+              PKG_MANAGER="yum"
+              PKG_UPDATE="sudo yum update -y"
+              PKG_INSTALL="sudo yum install -y"
+              DOCKER_PKG="docker"
+            else
+              echo "No compatible package manager found (apt-get or yum)" >&2
+              exit 1
+            fi
+
             # Instala Docker y Git si cualquiera de los dos no está presente en el EC2.
             if ! command -v docker &>/dev/null || ! command -v git &>/dev/null; then
-              sudo apt-get update
-              sudo apt-get install -y docker.io git
+              $PKG_UPDATE
+              $PKG_INSTALL $DOCKER_PKG git
               sudo usermod -aG docker "$USER"
             fi
 
