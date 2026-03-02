@@ -1,10 +1,11 @@
 spring:
-  application:
-    name: sd-implementation-challenge
-  otel:
-    tracing:
-      sampling:
-        probability: 1.0
+    application:
+        name: rate-limiter
+    web:
+        error:
+            include-message: always
+            include-exception: true
+            include-binding-errors: always
 
 springdoc:
   swagger-ui:
@@ -25,14 +26,31 @@ rate-limiter:
   refill-rate-per-second: 5
 
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,info,prometheus
-  endpoint:
-    health:
-      show-details: always
-  otlp:
+    endpoints:
+        web:
+            exposure:
+                include: health,metrics,info,prometheus,otlp
+    endpoint:
+        health:
+            show-details: always
     metrics:
-      export:
-        step: 10s
+        enable:
+            jvm: true
+            process: true
+            logback: true
+    prometheus:
+        metrics:
+            export:
+                step: 10s
+                descriptions: true
+    otlp:
+        metrics:
+            export:
+                step: 10s
+    tracing:
+        sampling:
+            probability: 1.0
+    simple:
+        metrics:
+            export:
+                enabled: true

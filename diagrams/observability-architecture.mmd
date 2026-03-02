@@ -1,0 +1,95 @@
+flowchart TB
+    subgraph observability["🔭 Observability Layer"]
+        Logs["Logs (Log4j2)\nstdout → Loki"]
+        Traces["Traces (OpenTelemetry)\nOTLP → Tempo"]
+        Metrics["Metrics (Micrometer)\nPrometheus + OTLP"]
+    end
+
+    subgraph adapter["adapter/api — WebFlux Functional"]
+        Router["RateLimiterRouter\ncoRouter { POST }"]
+        Handler["RateLimitHandler\nsuspend fun check()"]
+        BodyValidator["BodyValidator\nvalidate(body)"]
+        ExHandler["RateLimitExceptionHandler\n@RestControllerAdvice"]
+        HttpMetricsFilter["HttpRequestMetricsFilter\nhttp_server_requests timer"]
+        DTOs["RateLimitRequest\nRateLimitResponse"]
+    end
+
+    subgraph ports["core/port — Interfaces"]
+        Port(["RateLimiterPort\ntryConsume(key): Unit"])
+        StorePort(["BucketStore\ngetOrCreate(key, init)"])
+        ClockPort(["Clock\nnowMillis(): Long"])
+    end
+
+    subgraph domain["core/domain — Pure Kotlin"]
+        Key["RateLimitKey\n@JvmInline value class"]
+        State["BucketState\nmilliTokens, lastRefillAt"]
+        Config["TokenBucketConfig\ncapacity, refillRatePerSecond"]
+        DeniedException["RateLimitDeniedException\nretryAfterSeconds: Long"]
+    end
+
+    subgraph infra["infra — Implementations"]
+        Limiter["TokenBucketRateLimiter\nCAS loop + lazy refill"]
+        Store["InMemoryBucketStore\nConcurrentHashMap"]
+        Clock["SystemClock\nSystem.currentTimeMillis()"]
+    end
+
+    subgraph monitoring["Monitoring Stack (Docker Compose)"]
+        Prometheus["Prometheus\n:9090\nScrape /actuator/prometheus\nper 10s"]
+        Grafana["Grafana UI\n:3000"]
+        Tempo["Tempo\nTrace Storage"]
+        Loki["Loki\nLog Storage"]
+        Collector["OpenTelemetry Collector\nOTLP Receiver"]
+    end
+
+    Cfg["RateLimiterConfig\n@Configuration"]
+
+    Router --> Handler
+    Handler --> BodyValidator
+    Handler --> Port
+    Handler -.->|throws| DeniedException
+    ExHandler -.->|catches| DeniedException
+    Handler --> DTOs
+    ExHandler --> DTOs
+    HttpMetricsFilter --> Handler
+    HttpMetricsFilter --> Metrics
+
+    Limiter -.->|implements| Port
+    Store -.->|implements| StorePort
+    Clock -.->|implements| ClockPort
+
+    Limiter --> StorePort
+    Limiter --> ClockPort
+    Limiter --> State
+    Limiter --> Config
+    Limiter -.->|throws| DeniedException
+
+    Handler --> Key
+
+    %% Observability connections
+    Handler --> Logs
+    Handler --> Traces
+    Limiter --> Logs
+    Limiter --> Traces
+
+    Logs --> Loki
+    Traces --> Collector
+    Metrics --> Prometheus
+    Traces -->|gRPC/4317| Collector
+
+    Collector --> Tempo
+
+    Prometheus --> Grafana
+    Loki --> Grafana
+    Tempo --> Grafana
+
+    Grafana -->|Dashboard| Prometheus
+    Grafana -->|Logs| Loki
+    Grafana -->|Traces| Tempo
+
+    style observability fill:#ff6b9d,color:#000,stroke:#ff1493,stroke-width:2px
+    style monitoring fill:#4ecdc4,color:#000,stroke:#00bcd4,stroke-width:2px
+    style adapter fill:#95e1d3,stroke:#2d7a6f
+    style domain fill:#f8b500,stroke:#d47700
+    style infra fill:#ff9500,stroke:#d47700
+    style ports fill:#6dd5ed,stroke:#0069d6
+
