@@ -1,5 +1,6 @@
 package com.iol.ratelimiter
 
+import com.iol.ratelimiter.adapter.api.filters.RequestLoggingFilter
 import com.iol.ratelimiter.adapter.api.handlers.RateLimitHandler
 import com.iol.ratelimiter.adapter.api.routing.routers.operations.annotations.RateLimiterRouterOperations
 import com.iol.ratelimiter.adapter.api.validation.BodyValidator
@@ -24,6 +25,9 @@ import com.iol.ratelimiter.adapter.api.routing.routers.rateLimitRouter as buildR
  */
 @Configuration
 class RateLimiterConfig {
+    @Bean
+    fun requestLoggingFilter() = RequestLoggingFilter()
+
     @Bean
     fun tokenBucketConfig(
         @Value("\${rate-limiter.capacity}") capacity: Long,
