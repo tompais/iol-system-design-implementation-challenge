@@ -28,7 +28,7 @@ http_server_requests_milliseconds{method="POST",status="200|429|400",uri="/api/r
 - `method`: HTTP method (POST)
 - `uri`: Request path (`/api/rate-limit/check`)
 - `status`: HTTP status code (200, 429, 400)
-- `outcome`: SUCCESS, CLIENT_ERROR, SERVER_ERROR, REDIRECTION
+- `outcome`: SUCCESSFUL, CLIENT_ERROR, SERVER_ERROR, REDIRECTION, UNKNOWN
 
 **PromQL útil:**
 
