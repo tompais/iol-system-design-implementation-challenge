@@ -19,6 +19,7 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 const ENDPOINT = `${BASE_URL}/api/rate-limit/check`;
 const HEADERS = { "Content-Type": "application/json" };
 const CAPACITY = 10;
+const CAPACITY_ENFORCEMENT_TOTAL = CAPACITY * 10;
 
 export const options = {
   scenarios: {
@@ -121,8 +122,8 @@ export function validationBlankKey() {
 
 /**
  * Scenario 5: Capacity enforcement.
- * A single VU issues 100 sequential requests to the same key.
- * Exactly the first 10 should succeed (capacity), the rest denied.
+ * A single VU issues CAPACITY_ENFORCEMENT_TOTAL sequential requests to the same key.
+ * Exactly CAPACITY requests should succeed; the rest are denied.
  * This validates the core rate limit invariant without VU spawn timing variance.
  */
 export function capacityEnforcement() {
@@ -130,8 +131,12 @@ export function capacityEnforcement() {
   let allowed = 0;
   let denied = 0;
 
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < CAPACITY_ENFORCEMENT_TOTAL; i++) {
     const res = http.post(ENDPOINT, JSON.stringify({ key }), { headers: HEADERS });
+    check(res, {
+      "capacity enforcement → expected status (200 or 429)": (r) =>
+        r.status === 200 || r.status === 429,
+    });
     if (res.status === 200) {
       allowed++;
     } else if (res.status === 429) {
@@ -140,8 +145,10 @@ export function capacityEnforcement() {
   }
 
   check({ allowed, denied }, {
-    "100 requests → exactly 10 allowed": (data) => data.allowed === 10,
-    "100 requests → exactly 90 denied": (data) => data.denied === 90,
+    [`${CAPACITY_ENFORCEMENT_TOTAL} requests → exactly ${CAPACITY} allowed`]: (data) =>
+      data.allowed === CAPACITY,
+    [`${CAPACITY_ENFORCEMENT_TOTAL} requests → exactly ${CAPACITY_ENFORCEMENT_TOTAL - CAPACITY} denied`]: (data) =>
+      data.denied === CAPACITY_ENFORCEMENT_TOTAL - CAPACITY,
   });
 }
 
