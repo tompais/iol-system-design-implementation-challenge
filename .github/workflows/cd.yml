@@ -29,8 +29,7 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              "${EC2_USERNAME}@${EC2_HOST}" << 'DEPLOY_SCRIPT'
+          ssh "${EC2_USERNAME}@${EC2_HOST}" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
 
             # Versiones pinneadas para garantizar reproducibilidad y verificación de integridad.
