@@ -136,6 +136,10 @@ export function capacityEnforcement() {
 
   for (let i = 0; i < CAPACITY_ENFORCEMENT_TOTAL; i++) {
     const res = http.post(ENDPOINT, JSON.stringify({ key }), { headers: HEADERS });
+    check(res, {
+      "capacity enforcement → expected status (200 or 429)": (r) =>
+        r.status === 200 || r.status === 429,
+    });
     if (res.status === 200) {
       allowed++;
     } else if (res.status === 429) {
