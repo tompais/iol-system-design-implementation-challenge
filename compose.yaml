@@ -41,8 +41,8 @@ services:
       - '8080:8080'
     environment:
       OTEL_SERVICE_NAME: rate-limiter
-      # Brave tracing uses Docker service name to reach Zipkin
-      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://grafana-lgtm:9411/api/v2/spans
+      # Brave tracing: Docker service name resolves to container IP via Docker DNS
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: "http://grafana-lgtm:9411/api/v2/spans"
     depends_on:
       prometheus:
         condition: service_started

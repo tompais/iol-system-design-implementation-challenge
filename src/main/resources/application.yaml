@@ -40,7 +40,14 @@ management:
     metrics:
       export:
         step: 10s
-  # Brave tracing: send traces to Zipkin endpoint (port 9411 in LGTM stack)
+  # Disable OTLP metrics export (comes from spring-boot-starter-opentelemetry as transitive dependency)
+  # We only use Prometheus Registry for metrics - this prevents "Connection refused" errors
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  # Brave tracing: send traces to Zipkin endpoint
+  # Use 'grafana-lgtm' Docker service name (not localhost) - resolves via Docker network
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+      endpoint: http://grafana-lgtm:9411/api/v2/spans

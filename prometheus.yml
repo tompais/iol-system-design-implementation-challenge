@@ -1,15 +1,12 @@
 # Prometheus configuration for rate-limiter service
-# This config is mounted into grafana-lgtm container and configures Prometheus
-# to scrape metrics from the rate-limiter app at http://app:8080/actuator/prometheus
+# Scrapes metrics from the rate-limiter app at http://app:8080/actuator/prometheus
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-  external_labels:
-    job: 'sd-implementation-challenge'
+  scrape_interval: 10s
+  evaluation_interval: 10s
 
 scrape_configs:
-  - job_name: 'sd-implementation-challenge'
+  - job_name: 'rate-limiter'
     static_configs:
       # 'app' is the Docker service name in compose.yaml
       - targets: ['app:8080']
