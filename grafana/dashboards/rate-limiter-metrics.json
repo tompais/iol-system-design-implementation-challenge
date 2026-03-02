@@ -454,7 +454,7 @@
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "expr": "jvm_memory_usage_bytes",
+          "expr": "jvm_memory_used_bytes",
           "refId": "A",
           "legendFormat": "{{area}}"
         }
@@ -542,7 +542,7 @@
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "expr": "jvm_threads_live_threads",
+          "expr": "jvm_threads_live",
           "refId": "A",
           "legendFormat": "Live Threads"
         }
@@ -882,7 +882,7 @@
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "expr": "(jvm_memory_usage_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"}) * 100",
+          "expr": "(jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"}) * 100",
           "refId": "A",
           "legendFormat": "Heap %"
         }

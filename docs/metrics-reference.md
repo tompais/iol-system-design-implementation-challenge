@@ -70,7 +70,7 @@ Auto-recolectadas. No requieren configuración adicional.
 #### Memory (Memoria)
 
 ```
-jvm_memory_usage_bytes{area="heap|non_heap",id="Ps Eden Space|Ps Survivor Space|Ps Old Gen|..."}
+jvm_memory_used_bytes{area="heap|non_heap",id="Ps Eden Space|Ps Survivor Space|Ps Old Gen|..."}
 jvm_memory_max_bytes{area="heap|non_heap",id="..."}
 jvm_memory_committed_bytes{area="heap|non_heap",id="..."}
 jvm_memory_init_bytes{area="heap|non_heap",id="..."}
@@ -80,28 +80,28 @@ jvm_memory_init_bytes{area="heap|non_heap",id="..."}
 
 ```promql
 # Memoria heap usada
-jvm_memory_usage_bytes{area="heap"}
+jvm_memory_used_bytes{area="heap"}
 
 # Memoria máxima
 jvm_memory_max_bytes{area="heap"}
 
 # Porcentaje de heap usado
-(jvm_memory_usage_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100
+(jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100
 
 # Memoria non-heap usada
-jvm_memory_usage_bytes{area="non_heap"}
+jvm_memory_used_bytes{area="non_heap"}
 
 # Tendencia de memoria (crecimiento en 5 minutos)
-increase(jvm_memory_usage_bytes{area="heap"}[5m])
+increase(jvm_memory_used_bytes{area="heap"}[5m])
 
 # Cambio por minuto
-rate(jvm_memory_usage_bytes{area="heap"}[1m])
+rate(jvm_memory_used_bytes{area="heap"}[1m])
 ```
 
 #### Threads (Threads)
 
 ```
-jvm_threads_live_threads
+jvm_threads_live
 jvm_threads_peak_threads
 jvm_threads_daemon_threads
 jvm_threads_started_threads_total
@@ -111,7 +111,7 @@ jvm_threads_started_threads_total
 
 ```promql
 # Threads activos ahora
-jvm_threads_live_threads
+jvm_threads_live
 
 # Threads pico (máximo histórico)
 jvm_threads_peak_threads
@@ -293,12 +293,12 @@ El dashboard `grafana/dashboards/rate-limiter-metrics.json` incluye todos estos 
    - Unidad: percent
 
 5. **JVM Memory Usage**
-   - Query: `jvm_memory_usage_bytes`
+   - Query: `jvm_memory_used_bytes`
    - Muestra: Heap + non-heap
    - Unidad: bytes
 
 6. **JVM Live Threads**
-   - Query: `jvm_threads_live_threads`
+   - Query: `jvm_threads_live`
    - Muestra: Threads activos
    - Unidad: count
 
@@ -325,7 +325,7 @@ El dashboard `grafana/dashboards/rate-limiter-metrics.json` incluye todos estos 
     - Unidad: percent
 
 11. **Heap Memory Usage %**
-    - Query: `(jvm_memory_usage_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100`
+    - Query: `(jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100`
     - Muestra: Porcentaje de heap usado
     - Unidad: percent
 
@@ -354,7 +354,7 @@ Para crear alertas automáticas en Grafana:
 |---|---|---|---|---|
 | **High Heap Usage** | `(...heap} / ...max} * 100` | > 85% | 5m | Aumentar `-Xmx` |
 | **GC Pause Too Long** | `histogram_quantile(0.99, jvm_gc_pause...)` | > 1s | 5m | Tuning GC |
-| **Too Many Threads** | `jvm_threads_live_threads` | > 50 | 10m | Buscar memory leak |
+| **Too Many Threads** | `jvm_threads_live` | > 50 | 10m | Buscar memory leak |
 | **High CPU Usage** | `process_cpu_usage * 100` | > 80% | 5m | Escalar horizontalmente |
 
 ---
