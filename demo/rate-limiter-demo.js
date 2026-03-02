@@ -20,7 +20,7 @@ const ENDPOINT = `${BASE_URL}/api/rate-limit/check`;
 const HEADERS = { "Content-Type": "application/json" };
 const CAPACITY = 10;
 // Ten times the capacity: under typical latencies this should exhaust the bucket and still leave extra requests
-const TOTAL_REQUESTS = CAPACITY * 10;
+const CAPACITY_ENFORCEMENT_TOTAL = CAPACITY * 10;
 
 export const options = {
   scenarios: {
@@ -123,7 +123,7 @@ export function validationBlankKey() {
 
 /**
  * Scenario 5: Capacity enforcement.
- * A single VU issues TOTAL_REQUESTS sequential requests to the same key.
+ * A single VU issues CAPACITY_ENFORCEMENT_TOTAL sequential requests to the same key.
  * At least CAPACITY requests should be allowed (bucket starts full); any
  * surplus is caused by token refill during the run and is expected behaviour.
  * Every response must be either 200 or 429 — any other status is an error.
@@ -134,7 +134,7 @@ export function capacityEnforcement() {
   let denied = 0;
   let unexpected = 0;
 
-  for (let i = 0; i < TOTAL_REQUESTS; i++) {
+  for (let i = 0; i < CAPACITY_ENFORCEMENT_TOTAL; i++) {
     const res = http.post(ENDPOINT, JSON.stringify({ key }), { headers: HEADERS });
     if (res.status === 200) {
       allowed++;
@@ -149,7 +149,7 @@ export function capacityEnforcement() {
     [`at least ${CAPACITY} requests allowed`]: (data) => data.allowed >= CAPACITY,
     ["at least one request denied (capacity enforced)"]: (data) => data.denied > 0,
     ["no unexpected HTTP status codes"]: (data) => data.unexpected === 0,
-    ["all requests accounted for"]: (data) => data.allowed + data.denied + data.unexpected === TOTAL_REQUESTS,
+    ["all requests accounted for"]: (data) => data.allowed + data.denied + data.unexpected === CAPACITY_ENFORCEMENT_TOTAL,
   });
 }
 
