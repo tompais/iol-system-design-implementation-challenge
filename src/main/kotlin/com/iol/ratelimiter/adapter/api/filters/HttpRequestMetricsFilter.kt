@@ -37,7 +37,7 @@ class HttpRequestMetricsFilter(
             sample.stop(
                 Timer
                     .builder(HTTP_SERVER_REQUESTS)
-                    .tag("method", exchange.request.methodValue ?: "UNKNOWN")
+                    .tag("method", exchange.request.method.name())
                     .tag("uri", path)
                     .tag("status", statusCode?.toString() ?: "UNKNOWN")
                     .tag("outcome", outcome(statusCode))
