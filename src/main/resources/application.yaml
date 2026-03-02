@@ -38,6 +38,12 @@ management:
             jvm: true
             process: true
             logback: true
+        tags:
+            application: ${spring.application.name}
+        distribution:
+            # Excluir rutas no relevantes de las métricas
+            percentiles-histogram:
+                http.server.requests: true
     prometheus:
         metrics:
             export:
@@ -54,3 +60,6 @@ management:
         metrics:
             export:
                 enabled: true
+    observations:
+        key-values:
+            application: ${spring.application.name}

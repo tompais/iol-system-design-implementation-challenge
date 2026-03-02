@@ -24,6 +24,13 @@ class HttpRequestMetricsFilter(
         exchange: ServerWebExchange,
         chain: WebFilterChain,
     ): Mono<Void> {
+        val path = exchange.request.uri.path
+
+        // Excluir rutas de OpenAPI, Swagger y Actuator de métricas
+        if (ExcludedPaths.isExcluded(path)) {
+            return chain.filter(exchange)
+        }
+
         val sample = Timer.start(meterRegistry)
         return chain.filter(exchange).doFinally {
             val statusCode = exchange.response.statusCode?.value()
@@ -31,7 +38,7 @@ class HttpRequestMetricsFilter(
                 Timer
                     .builder(HTTP_SERVER_REQUESTS)
                     .tag("method", exchange.request.method.name())
-                    .tag("uri", exchange.request.uri.path)
+                    .tag("uri", path)
                     .tag("status", statusCode?.toString() ?: "UNKNOWN")
                     .tag("outcome", outcome(statusCode))
                     .register(meterRegistry),

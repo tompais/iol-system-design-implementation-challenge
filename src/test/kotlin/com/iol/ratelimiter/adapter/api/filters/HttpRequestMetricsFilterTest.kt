@@ -2,6 +2,7 @@ package com.iol.ratelimiter.adapter.api.filters
 
 import assertk.assertThat
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
@@ -125,5 +126,56 @@ class HttpRequestMetricsFilterTest {
                 .tag("outcome", "UNKNOWN")
                 .timer(),
         ).isNotNull()
+    }
+
+    @Test
+    fun `excludes metrics for swagger paths`() {
+        val exchange =
+            MockServerWebExchange.from(
+                MockServerHttpRequest.get("/swagger-ui.html").build(),
+            )
+        val chain =
+            WebFilterChain { ex ->
+                ex.response.statusCode = HttpStatus.OK
+                Mono.empty()
+            }
+
+        filter.filter(exchange, chain).block()
+
+        assertThat(meterRegistry.find("http.server.requests").tag("uri", "/swagger-ui.html").timer()).isNull()
+    }
+
+    @Test
+    fun `excludes metrics for actuator paths`() {
+        val exchange =
+            MockServerWebExchange.from(
+                MockServerHttpRequest.get("/actuator/health").build(),
+            )
+        val chain =
+            WebFilterChain { ex ->
+                ex.response.statusCode = HttpStatus.OK
+                Mono.empty()
+            }
+
+        filter.filter(exchange, chain).block()
+
+        assertThat(meterRegistry.find("http.server.requests").tag("uri", "/actuator/health").timer()).isNull()
+    }
+
+    @Test
+    fun `excludes metrics for v3 api-docs paths`() {
+        val exchange =
+            MockServerWebExchange.from(
+                MockServerHttpRequest.get("/v3/api-docs").build(),
+            )
+        val chain =
+            WebFilterChain { ex ->
+                ex.response.statusCode = HttpStatus.OK
+                Mono.empty()
+            }
+
+        filter.filter(exchange, chain).block()
+
+        assertThat(meterRegistry.find("http.server.requests").tag("uri", "/v3/api-docs").timer()).isNull()
     }
 }
