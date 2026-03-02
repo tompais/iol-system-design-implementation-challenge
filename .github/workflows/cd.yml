@@ -45,10 +45,26 @@ jobs:
               *) echo "Arquitectura no soportada: $ARCH" >&2; exit 1 ;;
             esac
 
+            # Detecta el package manager (apt-get para Debian/Ubuntu, yum para Amazon Linux/RHEL).
+            if command -v apt-get &>/dev/null; then
+              PKG_MANAGER="apt-get"
+              PKG_UPDATE="sudo apt-get update"
+              PKG_INSTALL="sudo apt-get install -y"
+              DOCKER_PKG="docker.io"
+            elif command -v yum &>/dev/null; then
+              PKG_MANAGER="yum"
+              PKG_UPDATE="sudo yum update -y"
+              PKG_INSTALL="sudo yum install -y"
+              DOCKER_PKG="docker"
+            else
+              echo "No compatible package manager found (apt-get or yum)" >&2
+              exit 1
+            fi
+
             # Instala Docker y Git si cualquiera de los dos no está presente en el EC2.
             if ! command -v docker &>/dev/null || ! command -v git &>/dev/null; then
-              sudo apt-get update
-              sudo apt-get install -y docker.io git
+              $PKG_UPDATE
+              $PKG_INSTALL $DOCKER_PKG git
               sudo usermod -aG docker "$USER"
             fi
 
