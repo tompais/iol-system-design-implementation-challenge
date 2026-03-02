@@ -19,11 +19,13 @@ class RequestLoggingFilter : WebFilter {
                 exchange.response.statusCode
                     ?.value()
                     ?.toString() ?: "unknown"
-            log.info("< {} {} {} ({}ms)", request.method, request.uri.path, status, (System.nanoTime() - startNs) / 1_000_000)
+            val elapsedMs = (System.nanoTime() - startNs) / NANOS_PER_MILLI
+            log.info("< {} {} {} ({}ms)", request.method, request.uri.path, status, elapsedMs)
         }
     }
 
     companion object {
         private val log = LoggerFactory.getLogger(RequestLoggingFilter::class.java)
+        private const val NANOS_PER_MILLI = 1_000_000L
     }
 }
