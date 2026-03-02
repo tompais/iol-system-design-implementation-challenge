@@ -2,6 +2,7 @@ package com.iol.ratelimiter.adapter.api.filters
 
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import org.springframework.http.HttpStatus
 import org.springframework.web.server.ServerWebExchange
 import org.springframework.web.server.WebFilter
 import org.springframework.web.server.WebFilterChain
@@ -38,14 +39,7 @@ class HttpRequestMetricsFilter(
         }
     }
 
-    private fun outcome(statusCode: Int?): String =
-        when {
-            statusCode == null -> "UNKNOWN"
-            statusCode in 200..299 -> "SUCCESS"
-            statusCode in 300..399 -> "REDIRECTION"
-            statusCode in 400..499 -> "CLIENT_ERROR"
-            else -> "SERVER_ERROR"
-        }
+    private fun outcome(statusCode: Int?): String = statusCode?.let { HttpStatus.Series.resolve(it)?.name } ?: "UNKNOWN"
 
     companion object {
         private const val HTTP_SERVER_REQUESTS = "http.server.requests"

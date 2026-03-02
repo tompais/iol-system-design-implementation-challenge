@@ -34,7 +34,7 @@ class HttpRequestMetricsFilterTest {
                 .tag("method", "POST")
                 .tag("uri", "/api/rate-limit/check")
                 .tag("status", "200")
-                .tag("outcome", "SUCCESS")
+                .tag("outcome", "SUCCESSFUL")
                 .timer(),
         ).isNotNull()
     }
