@@ -39,7 +39,7 @@ class TokenBucketRateLimiter(
             val refilled = computeRefill(current)
             if (refilled.milliTokens < ONE_MILLI_TOKEN) {
                 val retryAfter = retryAfterSeconds(refilled)
-                log.info("denied key={} retryAfter={}s", key.value, retryAfter)
+                log.debug("denied key={} retryAfter={}s", key.value, retryAfter)
                 throw RateLimitDeniedException(retryAfter)
             }
             val next = refilled.copy(milliTokens = refilled.milliTokens - ONE_MILLI_TOKEN)

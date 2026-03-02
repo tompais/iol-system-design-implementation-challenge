@@ -11,7 +11,7 @@ class RequestLoggingFilter : WebFilter {
         exchange: ServerWebExchange,
         chain: WebFilterChain,
     ): Mono<Void> {
-        val start = System.currentTimeMillis()
+        val startNs = System.nanoTime()
         val request = exchange.request
         log.info("> {} {}", request.method, request.uri.path)
         return chain.filter(exchange).doFinally {
@@ -19,7 +19,7 @@ class RequestLoggingFilter : WebFilter {
                 exchange.response.statusCode
                     ?.value()
                     ?.toString() ?: "unknown"
-            log.info("< {} {} {} ({}ms)", request.method, request.uri.path, status, System.currentTimeMillis() - start)
+            log.info("< {} {} {} ({}ms)", request.method, request.uri.path, status, (System.nanoTime() - startNs) / 1_000_000)
         }
     }
 

@@ -80,7 +80,7 @@ fun interface BucketStore {
 
 The service exports metrics, distributed traces, and structured logs through three independent pipelines, all consumed by a `grafana/otel-lgtm` container in the Docker Compose stack.
 
-**Metrics (OTLP push):** `micrometer-registry-otlp` pushes all registered Micrometer meters — JVM heap, GC pauses, HTTP server request duration, rate-limiter custom metrics — to the OTLP HTTP receiver at `grafana-lgtm:4318/v1/metrics` every 10 seconds (`management.otlp.metrics.export.step=10s`). The OTEL Collector inside the LGTM container forwards these to Prometheus, where Grafana's JVM Overview dashboard can query them. A `/actuator/prometheus` endpoint is also exposed for direct Prometheus scraping if needed.
+**Metrics (OTLP push):** `micrometer-registry-otlp` pushes all registered Micrometer meters — JVM heap, GC pauses, HTTP server request duration — to the OTLP HTTP receiver at `grafana-lgtm:4318/v1/metrics` every 10 seconds (`management.otlp.metrics.export.step=10s`). The OTEL Collector inside the LGTM container forwards these to Prometheus, where Grafana's JVM Overview dashboard can query them. `micrometer-registry-prometheus` is also on the classpath, so `/actuator/prometheus` is available for direct Prometheus scraping.
 
 **Traces (OTLP gRPC):** `spring-boot-starter-opentelemetry` configures Micrometer Tracing with the OTel bridge (`micrometer-tracing-bridge-otel`). Traces are exported via OTLP gRPC to `grafana-lgtm:4317`. Sampling is set to 100% (`spring.otel.tracing.sampling.probability=1.0`) so every request produces a trace in Tempo.
 
@@ -88,7 +88,7 @@ The service exports metrics, distributed traces, and structured logs through thr
 
 **Request/response logging:** `RequestLoggingFilter` (a `WebFilter` registered as a plain bean in `RateLimiterConfig`) logs the HTTP method and path on entry (`> POST /api/rate-limit/check`) and the status code with elapsed milliseconds on completion (`< POST /api/rate-limit/check 200 (3ms)`). Because the filter runs inside the Reactor/Netty pipeline where the span is already active, these log lines automatically carry the `traceId` and `spanId` MDC values.
 
-**Rate-limiter operational logs:** `TokenBucketRateLimiter` logs at `INFO` on each denied request (key + `retryAfter` seconds) and at `DEBUG` on each allowed request (key + remaining milliTokens). `INFO`-level denial logs are always visible in production; `DEBUG`-level allowed logs are suppressed by default but can be enabled per-key for troubleshooting.
+**Rate-limiter operational logs:** `TokenBucketRateLimiter` logs at `DEBUG` on each denied request (key + `retryAfter` seconds) and at `DEBUG` on each allowed request (key + remaining milliTokens). Both log levels are suppressed by default and can be enabled by setting the `com.iol.ratelimiter.infra.TokenBucketRateLimiter` logger to `DEBUG` in the logging configuration.
 
 ---
 
