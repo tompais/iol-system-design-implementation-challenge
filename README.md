@@ -139,7 +139,7 @@ The service is running 24/7 on AWS EC2 (`sa-east-1`):
 |----------|-----|
 | API | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/rate-limit/check` |
 | Swagger UI | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/swagger-ui.html` |
-| Grafana | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:3000` |
+| Grafana | `http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:3000` (login required — default `admin / admin`) |
 
 ```bash
 curl -X POST http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/rate-limit/check \

@@ -34,10 +34,12 @@ curl -X POST http://ec2-56-124-56-96.sa-east-1.compute.amazonaws.com:8080/api/ra
 |------|----------|---------|------------|
 | 22 | TCP | SSH — instance administration | Operator IP only |
 | 8080 | TCP | Rate Limiter API (Spring Boot / Netty) | `0.0.0.0/0` (public) |
-| 3000 | TCP | Grafana (dashboards, alerts) | `0.0.0.0/0` (public, no auth — see note) |
+| 3000 | TCP | Grafana (dashboards, alerts) | `0.0.0.0/0` (public, Grafana login required — see note) |
 | 9090 | TCP | Prometheus (metrics scraping + query UI) | `0.0.0.0/0` (public) |
 
-> **Note:** Grafana is exposed publicly for demo purposes. In a production environment, restrict port 3000 to your operator IP or put it behind an authenticated reverse proxy.
+> **Note:** Grafana's HTTP endpoint is publicly reachable for demo purposes, but the instance still requires a Grafana login (no anonymous dashboards). The demo environment uses the default `admin / admin` credentials. **Change these immediately after any deployment that is publicly reachable — never leave default credentials on a live instance.** In a production environment, either restrict port 3000 to your operator IP range or put Grafana behind an authenticated reverse proxy and configure per-user accounts.
+
+> **Security notice:** Ports 3000 (Grafana) and 9090 (Prometheus) are exposed publicly for demo/evaluation purposes only. These services expose operational metrics and dashboards that can reveal system topology, versions, and internal details. For any non-demo deployment, restrict these ports to operator IPs/VPN only or place them behind an authenticated reverse proxy.
 
 ---
 

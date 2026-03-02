@@ -124,13 +124,13 @@ This section explains Kotlin-specific constructs used in the implementation for 
 value class RateLimitKey(val value: String)
 ```
 
-A `value class` wraps a single primitive or object but is **erased at the JVM bytecode level** — at runtime it is represented directly as the wrapped type (here, a `String`) with zero object allocation overhead. Compare to a regular wrapper class which always allocates a heap object.
+A `value class` wraps a single value and, on the JVM, is represented directly as the underlying type (here, a `String`) in non-nullable, non-generic contexts such as non-null parameters, return types, and non-generic properties — no extra wrapper object is allocated. In other contexts — for example when the value class is nullable, used as `Any?`, or appears as a generic type argument — it is boxed into a regular object and may allocate just like a normal wrapper.
 
-`@JvmInline` triggers the JVM erasure. Without it the wrapper exists as a full object.
+On the JVM, `@JvmInline` is part of the value-class declaration syntax and requests this inline representation; the compiler decides where boxing or unboxing is required and inserts it as needed.
 
 **Why use it for `RateLimitKey`?**
-- Every HTTP request creates a `RateLimitKey` from the request body's `key` field. Using a plain `String` everywhere would allow accidental misuse (passing a user ID where a request ID is expected). The value class provides **compile-time type safety at zero runtime cost**.
-- `ConcurrentHashMap` key lookup uses `equals` and `hashCode`. `value class` delegates both to the wrapped `String`, so map performance is identical to using a raw `String` key.
+- Every HTTP request creates a `RateLimitKey` from the request body's `key` field. Using a plain `String` everywhere would allow accidental misuse (passing a user ID where a request ID is expected). In our usage sites (`RateLimitKey` is non-null and not used as `Any?` or in generics), the value class provides **compile-time type safety with effectively no additional allocation compared to a raw `String`**.
+- `ConcurrentHashMap` key lookup uses `equals` and `hashCode`. `value class` delegates both to the underlying `String`, so key lookups have the same equality and hashing semantics as using a raw `String`. Since `ConcurrentHashMap` is a generic class, the Kotlin compiler boxes the value class when it is used as a key type — the trade-off is explicit type-safety and domain modeling clarity at the cost of the boxing that would occur with any wrapper key type.
 
 ### `data class` — `BucketState` and `TokenBucketConfig`
 
