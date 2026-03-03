@@ -224,12 +224,12 @@ The `.github/workflows/cd.yml` workflow redeploys the app to EC2 automatically o
 
 1. A merge to `master` triggers the CI workflow (`ci.yml`)
 2. CI builds, tests, lints, and runs k6 load tests
-3. On CI success, the `docker` job builds the Docker image using BuildKit (with GitHub Actions layer cache) and pushes it to `ghcr.io/tompais/iol-system-design-implementation-challenge:latest`
+3. On CI success, the `docker` job (scoped to `packages: write`) builds the Docker image using BuildKit (with GitHub Actions layer cache) and pushes `:latest` + `:<sha>` to `ghcr.io/tompais/iol-system-design-implementation-challenge`
 4. The `cd.yml` `workflow_run` trigger fires after CI completes
-5. The deploy job SSHes into the EC2 instance: checks Docker + Compose are available, downloads the latest `compose.yaml` via `curl`, pulls the pre-built image from ghcr.io, and starts the container — **no git, no Gradle build on EC2**
-6. Only the app container is updated — `grafana-lgtm` keeps running with the existing image
+5. The deploy job SSHes into the EC2 instance: checks Docker + Compose are available, downloads `compose.yaml` pinned to the triggering commit SHA via `curl`, writes `IMAGE_TAG=<sha>` to a `.env` file, pulls the exact SHA-tagged image from ghcr.io, and starts the app container — **no git, no Gradle build on EC2**
+6. Only the app container is updated (`--no-deps`) — `grafana-lgtm` keeps running with its existing image unchanged
 
-> **Why no `--build` on EC2?** A t2.micro (1 vCPU, 1 GB RAM) cannot reliably run a Gradle build inside Docker. The image is built once in CI where resources are ample, tagged with both `:latest` and the commit SHA, pushed to ghcr.io, then pulled on EC2. This eliminates the timeout that occurred when Gradle ran on the instance. No git clone is needed either — the only file required to run `docker compose up -d app` is `compose.yaml`, which is fetched directly from the raw GitHub URL.
+> **Why no `--build` on EC2?** A t2.micro (1 vCPU, 1 GB RAM) cannot reliably run a Gradle build inside Docker. The image is built once in CI where resources are ample, tagged with both `:latest` and the commit SHA, pushed to ghcr.io, then pulled on EC2. This eliminates the timeout that occurred when Gradle ran on the instance. No git clone is needed either — the only file required to run `docker compose up -d --no-deps app` is `compose.yaml`, which is fetched directly from the raw GitHub URL pinned to the same SHA that built the image.
 
 ### One-time EC2 prerequisites
 
