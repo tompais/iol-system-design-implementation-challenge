@@ -185,9 +185,12 @@ jobs:
             sudo docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GHCR_TOKEN"
             trap 'sudo docker logout ghcr.io 2>/dev/null || true' EXIT
 
-            # Baja el stack completo anterior liberando todos los puertos (8080, 3000, 9090).
-            # || true garantiza que no falle si no había ningún stack corriendo (primer deploy).
-            sudo docker compose down --remove-orphans || true
+            # Solo ejecuta "docker compose down" si hay servicios definidos; de lo contrario, no falla.
+            if sudo docker compose ps -q | grep -q .; then
+              sudo docker compose down --remove-orphans
+            else
+              echo "No existing Docker Compose stack to stop."
+            fi
 
             # Pull de todos los servicios del stack para tener las imágenes actualizadas.
             # La imagen de app viene de ghcr.io (publicada por CI); grafana-lgtm viene de Docker Hub.
