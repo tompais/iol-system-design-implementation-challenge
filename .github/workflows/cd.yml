@@ -10,6 +10,9 @@ concurrency:
   group: deploy-ec2
   cancel-in-progress: false
 
+permissions:
+  packages: read
+
 jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -28,6 +31,8 @@ jobs:
           REPO_PATH: ${{ secrets.EC2_REPO_PATH }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
@@ -35,29 +40,29 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
           ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "REPO_PATH=$(printf '%q' "$REPO_PATH") bash -s" << 'DEPLOY_SCRIPT'
+            "REPO_PATH=$(printf '%q' "$REPO_PATH") GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR") bash -s" << DEPLOY_SCRIPT
             set -euo pipefail 2>/dev/null || set -euo
 
-            # Versiones pinneadas para garantizar reproducibilidad y verificación de integridad.
+            GHCR_TOKEN='${GHCR_TOKEN}'
+            DEPLOY_SHA='${{ github.event.workflow_run.head_sha }}'
+
+            # Versión pinneada de Compose para garantizar reproducibilidad y verificación de integridad.
             REQUIRED_COMPOSE="2.36.0"
-            REQUIRED_BUILDX="0.17.0"
 
             # Detecta la arquitectura para seleccionar el binario correcto (x86_64 o ARM64).
-            ARCH=$(uname -m)
-            case "$ARCH" in
-              x86_64)  COMPOSE_ARCH="linux-x86_64"; BUILDX_ARCH="linux-amd64" ;;
-              aarch64) COMPOSE_ARCH="linux-aarch64"; BUILDX_ARCH="linux-arm64" ;;
-              *) echo "Arquitectura no soportada: $ARCH" >&2; exit 1 ;;
+            ARCH=\$(uname -m)
+            case "\$ARCH" in
+              x86_64)  COMPOSE_ARCH="linux-x86_64" ;;
+              aarch64) COMPOSE_ARCH="linux-aarch64" ;;
+              *) echo "Arquitectura no soportada: \$ARCH" >&2; exit 1 ;;
             esac
 
             # Detecta el package manager (apt-get para Debian/Ubuntu, yum para Amazon Linux/RHEL).
             if command -v apt-get &>/dev/null; then
-              PKG_MANAGER="apt-get"
               PKG_UPDATE="sudo apt-get update"
               PKG_INSTALL="sudo apt-get install -y"
               DOCKER_PKG="docker.io"
             elif command -v yum &>/dev/null; then
-              PKG_MANAGER="yum"
               PKG_UPDATE="sudo yum update -y"
               PKG_INSTALL="sudo yum install -y"
               DOCKER_PKG="docker"
@@ -66,11 +71,11 @@ jobs:
               exit 1
             fi
 
-            # Instala Docker y Git si cualquiera de los dos no está presente en el EC2.
-            if ! command -v docker &>/dev/null || ! command -v git &>/dev/null; then
-              $PKG_UPDATE
-              $PKG_INSTALL $DOCKER_PKG git
-              sudo usermod -aG docker "$USER"
+            # Instala Docker si no está presente en el EC2.
+            if ! command -v docker &>/dev/null; then
+              \$PKG_UPDATE
+              \$PKG_INSTALL \$DOCKER_PKG
+              sudo usermod -aG docker "\$USER"
             fi
 
             # Asegura que el servicio de Docker esté arrancado y habilitado,
@@ -85,58 +90,44 @@ jobs:
             # Instala el plugin de Docker Compose pinneado si no está disponible.
             if ! docker compose version &>/dev/null; then
               sudo mkdir -p /usr/local/lib/docker/cli-plugins
-              sudo curl -fSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}" \
+              sudo curl -fSL "https://github.com/docker/compose/releases/download/v\${REQUIRED_COMPOSE}/docker-compose-\${COMPOSE_ARCH}" \
                 -o /usr/local/lib/docker/cli-plugins/docker-compose
-              COMPOSE_SHA=$(curl -fsSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}.sha256" | awk '{print $1}')
-              [ -n "$COMPOSE_SHA" ] || { echo "No se pudo obtener el checksum de Compose" >&2; exit 1; }
-              echo "$COMPOSE_SHA  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
+              COMPOSE_SHA=\$(curl -fsSL "https://github.com/docker/compose/releases/download/v\${REQUIRED_COMPOSE}/docker-compose-\${COMPOSE_ARCH}.sha256" | awk '{print \$1}')
+              [ -n "\$COMPOSE_SHA" ] || { echo "No se pudo obtener el checksum de Compose" >&2; exit 1; }
+              echo "\$COMPOSE_SHA  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
               sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             fi
 
-            # Instala Docker Buildx >= 0.17.0 si la versión instalada es inferior o no existe.
-            CURRENT_BUILDX=$(docker buildx version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0")
-            if [ "$(printf '%s\n' "$REQUIRED_BUILDX" "$CURRENT_BUILDX" | sort -V | head -1)" != "$REQUIRED_BUILDX" ]; then
-              sudo mkdir -p /usr/local/lib/docker/cli-plugins
-              sudo curl -fSL "https://github.com/docker/buildx/releases/download/v${REQUIRED_BUILDX}/buildx-v${REQUIRED_BUILDX}.${BUILDX_ARCH}" \
-                -o /usr/local/lib/docker/cli-plugins/docker-buildx
-              BUILDX_SHA=$(curl -fsSL "https://github.com/docker/buildx/releases/download/v${REQUIRED_BUILDX}/checksums.txt" \
-                | grep "buildx-v${REQUIRED_BUILDX}.${BUILDX_ARCH}$" | awk '{print $1}')
-              [ -n "$BUILDX_SHA" ] || { echo "No se pudo obtener el checksum de Buildx" >&2; exit 1; }
-              echo "$BUILDX_SHA  /usr/local/lib/docker/cli-plugins/docker-buildx" | sha256sum -c -
-              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
-            fi
-
-            CLONE_DIR="${REPO_PATH%/}"
-            case "$CLONE_DIR" in
+            # Crea el directorio de trabajo y descarga el compose.yaml pinneado al SHA del deploy.
+            # No se necesita clonar el repo: la imagen viene de ghcr.io y compose.yaml es el único
+            # archivo necesario para orquestar el contenedor en el EC2.
+            DEPLOY_DIR="\${REPO_PATH%/}"
+            case "\$DEPLOY_DIR" in
               "~"|"~/"*)
-                if [ -z "${HOME:-}" ]; then
-                  echo "HOME must be set when using ~ in REPO_PATH (got: '$CLONE_DIR')" >&2
-                  exit 1
-                fi
-                CLONE_DIR="${HOME}${CLONE_DIR#\~}"
+                [ -n "\${HOME:-}" ] || { echo "HOME must be set when using ~ in REPO_PATH" >&2; exit 1; }
+                DEPLOY_DIR="\${HOME}\${DEPLOY_DIR#\~}"
                 ;;
               "~"*)
-                echo "~user paths are not supported in REPO_PATH (got: '$CLONE_DIR')" >&2
-                exit 1
+                echo "~user paths are not supported in REPO_PATH (got: '\$DEPLOY_DIR')" >&2; exit 1
                 ;;
             esac
-            case "$CLONE_DIR" in
+            case "\$DEPLOY_DIR" in
               /*) ;;
-              *) echo "REPO_PATH must resolve to an absolute path (got: '$CLONE_DIR')" >&2; exit 1 ;;
+              *) echo "REPO_PATH must resolve to an absolute path (got: '\$DEPLOY_DIR')" >&2; exit 1 ;;
             esac
-            if [ ! -d "$CLONE_DIR/.git" ]; then
-              case "$CLONE_DIR" in
-                ""|"/"|"."|".."|"${HOME:-}"|"/home"|"/root")
-                  echo "Refusing to remove unsafe directory: '$CLONE_DIR'" >&2
-                  exit 1
-                  ;;
-              esac
-              rm -rf "$CLONE_DIR"
-              git clone https://github.com/tompais/iol-system-design-implementation-challenge.git "$CLONE_DIR"
-            fi
-            cd "$CLONE_DIR"
-            git fetch origin master
-            git checkout master
-            git reset --hard origin/master
-            sudo docker compose up --build -d app
+            mkdir -p "\$DEPLOY_DIR"
+            curl -fsSL "https://raw.githubusercontent.com/tompais/iol-system-design-implementation-challenge/\${DEPLOY_SHA}/compose.yaml" \
+              -o "\$DEPLOY_DIR/compose.yaml"
+            echo "IMAGE_TAG=\${DEPLOY_SHA}" > "\$DEPLOY_DIR/.env"
+            cd "\$DEPLOY_DIR"
+
+            # Autentica en GHCR para hacer pull de la imagen pre-construida en CI.
+            # <<< evita crear un subproceso que exponga el token en ps; trap garantiza el logout.
+            sudo docker login ghcr.io -u "\$GITHUB_ACTOR" --password-stdin <<< "\$GHCR_TOKEN"
+            trap 'sudo docker logout ghcr.io 2>/dev/null || true' EXIT
+
+            # La imagen fue construida y publicada en ghcr.io por el job docker del CI.
+            # Solo hace pull y levanta — sin rebuild en el EC2.
+            sudo docker compose pull app
+            sudo docker compose up -d --no-deps app
           DEPLOY_SCRIPT

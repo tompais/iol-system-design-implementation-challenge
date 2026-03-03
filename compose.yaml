@@ -19,6 +19,7 @@ services:
 
   app:
     build: .
+    image: ghcr.io/tompais/iol-system-design-implementation-challenge:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - '8080:8080'

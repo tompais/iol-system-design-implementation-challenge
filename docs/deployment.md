@@ -223,13 +223,19 @@ The `.github/workflows/cd.yml` workflow redeploys the app to EC2 automatically o
 ### How it works
 
 1. A merge to `master` triggers the CI workflow (`ci.yml`)
-2. On CI success, the `cd.yml` `workflow_run` trigger fires
-3. The deploy job SSHes into the EC2 instance, pulls the latest code, and runs `docker compose up --build -d app`
-4. Only the app container is rebuilt — `grafana-lgtm` keeps running with the existing image
+2. CI builds, tests, lints, and runs k6 load tests
+3. On CI success, the `docker` job (scoped to `packages: write`) builds the Docker image using BuildKit (with GitHub Actions layer cache) and pushes `:latest` + `:<sha>` to `ghcr.io/tompais/iol-system-design-implementation-challenge`
+4. The `cd.yml` `workflow_run` trigger fires after CI completes
+5. The deploy job SSHes into the EC2 instance: checks Docker + Compose are available, downloads `compose.yaml` pinned to the triggering commit SHA via `curl`, writes `IMAGE_TAG=<sha>` to a `.env` file, pulls the exact SHA-tagged image from ghcr.io, and starts the app container — **no git, no Gradle build on EC2**
+6. Only the app container is updated (`--no-deps`) — `grafana-lgtm` keeps running with its existing image unchanged
+
+> **Why no `--build` on EC2?** A t2.micro (1 vCPU, 1 GB RAM) cannot reliably run a Gradle build inside Docker. The image is built once in CI where resources are ample, tagged with both `:latest` and the commit SHA, pushed to ghcr.io, then pulled on EC2. This eliminates the timeout that occurred when Gradle ran on the instance. No git clone is needed either — the only file required to run `docker compose up -d --no-deps app` is `compose.yaml`, which is fetched directly from the raw GitHub URL pinned to the same SHA that built the image.
 
 ### One-time EC2 prerequisites
 
-The manual setup steps in [AWS EC2 Free Tier](#aws-ec2-free-tier-247-hosting) must be completed once (Docker installed, repo cloned). After that, all updates are automated.
+Only Docker must be installed on the instance (see [AWS EC2 Free Tier](#aws-ec2-free-tier-247-hosting)). No git, no repo clone, no Gradle. The CD workflow installs Docker and the Compose plugin automatically on first run if they are missing.
+
+> **One-time package visibility**: After the first CI push, navigate to **GitHub repo → Packages → `iol-system-design-implementation-challenge` → Package settings → Change visibility → Public**. This lets EC2 pull the image without a long-lived PAT. The CD workflow uses the short-lived `GITHUB_TOKEN` for `docker login`, so the pull works automatically from the first deploy onward.
 
 ### Required GitHub Secrets
 
@@ -241,7 +247,7 @@ Configure these under **GitHub repo → Settings → Secrets and variables → A
 | `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
 | `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
 | `EC2_HOST_FINGERPRINT` | SSH host key fingerprint of the EC2 instance (run `ssh-keyscan -t ed25519 <host>` to obtain a single known-hosts line) |
-| `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge/sd-implementation-challenge`) |
+| `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge`) |
 
 ### Restart policy
 

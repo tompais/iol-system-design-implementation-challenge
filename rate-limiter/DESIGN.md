@@ -51,6 +51,7 @@ The two main candidates were Token Bucket and Sliding Window Counter. Token Buck
 | Clock source | `System.nanoTime()` (monotonic) | `System.currentTimeMillis()` (wall-clock, non-monotonic) |
 | HTTP request metrics | Explicit `HttpRequestMetricsFilter` WebFilter | Rely on `ServerHttpObservationFilter` (breaks for `coRouter` — no URI template) |
 | Performance testing | k6 run in CI after build (5 scenarios, 100% check thresholds) | Manual smoke test only |
+| Docker image build | Built once in CI (GitHub Actions) with BuildKit + GHA layer cache; pushed to ghcr.io; EC2 pulls pre-built image | Build on EC2 at deploy time — causes Gradle to run on a t2.micro (1 vCPU, 1 GB RAM), hanging and timing out |
 
 ### Storage: In-Memory vs Redis
 
@@ -237,11 +238,13 @@ suspend fun check(request: ServerRequest): ServerResponse { ... }
 
 ## How AI Was Used
 
-This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 8 pull requests (PR 0 + Increments 2–6, plus the K6 CI integration).
+This implementation was built collaboratively with **Claude Code** (claude-sonnet-4-6) using a structured TDD incremental workflow across 8 pull requests (PR 0 + Increments 2–6, plus the K6 CI integration), followed by a CD pipeline optimization PR.
 
 **Planning phase:** The developer reviewed the challenge requirements (`CHALLENGE.md`) and approved a detailed implementation plan including algorithm choice rationale, the `milliTokens` integer-CAS design, the `@JvmInline value class` for type-safe keys, the concurrency test design with `CountDownLatch`, and the 5-increment delivery sequence. Each design decision was discussed and understood before the plan was approved.
 
 **Implementation:** Claude generated source files following the approved plan in a strict RED → GREEN → REFACTOR TDD cycle: failing tests were committed first, then production code. Key technical decisions made during implementation — the `retryAfterSeconds` two-step ceiling division, the exception-based thin handler (`RateLimitDeniedException` + `@RestControllerAdvice`), the `LocalValidatorFactoryBean` for standalone test validation, the Log4j2 conflict resolution (excluding `log4j-to-slf4j` + `spring-boot-starter-logging`), and the observability configuration (OTLP step interval, MDC key verification, `RequestLoggingFilter`, rate-limiter operational logs) — were each reviewed and understood by the developer before commit.
+
+**CD pipeline optimization:** After observing that `docker compose up --build` on the EC2 t2.micro timed out (Gradle runs a full JVM compilation on 1 vCPU / 1 GB RAM), Claude diagnosed the root cause and proposed moving the Docker image build to CI. The CI `docker` job now uses `docker/build-push-action` with BuildKit and GitHub Actions layer cache to build and push `ghcr.io/tompais/iol-system-design-implementation-challenge:latest` and a commit-SHA tag after every successful merge to `master`. The EC2 deploy step was changed to `docker compose pull app && docker compose up -d app` — no rebuild on the instance. Both `<<< "$GHCR_TOKEN"` (avoids an `echo` subprocess that could expose the token in `ps`) and `trap 'docker logout ghcr.io' EXIT` (guarantees credential cleanup on failure) were applied on the reviewer's recommendation.
 
 **Tooling:** Claude Code was configured with project-specific automations:
 - **ktlint-format-on-save hook** — auto-formats Kotlin files before detekt runs
