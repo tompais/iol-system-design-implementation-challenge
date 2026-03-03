@@ -163,6 +163,11 @@ jobs:
               /*) ;;
               *) echo "REPO_PATH must resolve to an absolute path (got: '\$DEPLOY_DIR')" >&2; exit 1 ;;
             esac
+            # Limpia el directorio de deploy para evitar colisiones con archivos de despliegues
+            # anteriores (por ejemplo, un git clone previo o un compose.yml/docker-compose.yml
+            # residual que Compose podría leer junto al compose.yaml recién descargado).
+            # ${DEPLOY_DIR:?} falla si la variable está vacía, protegiendo contra un rm -rf /.
+            rm -rf "\${DEPLOY_DIR:?}"
             mkdir -p "\$DEPLOY_DIR"
             curl -fsSL "https://raw.githubusercontent.com/tompais/iol-system-design-implementation-challenge/\${DEPLOY_SHA}/compose.yaml" \
               -o "\$DEPLOY_DIR/compose.yaml"
