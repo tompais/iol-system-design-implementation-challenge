@@ -88,8 +88,10 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
           ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "REPO_PATH=$(printf '%q' "$REPO_PATH") GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR") bash -s" << DEPLOY_SCRIPT
+            "export REPO_PATH=$(printf '%q' "$REPO_PATH"); export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); bash -s" << DEPLOY_SCRIPT
             set -euo pipefail 2>/dev/null || set -euo
+
+            : "\${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
 
             GHCR_TOKEN='${GHCR_TOKEN}'
             DEPLOY_SHA='${{ github.event.workflow_run.head_sha }}'
