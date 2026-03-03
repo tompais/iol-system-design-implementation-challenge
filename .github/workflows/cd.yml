@@ -91,7 +91,7 @@ jobs:
             "export REPO_PATH=$(printf '%q' "$REPO_PATH"); export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); bash -s" << DEPLOY_SCRIPT
             set -euo pipefail 2>/dev/null || set -euo
 
-            : "${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
+            : "\${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
 
             GHCR_TOKEN='${GHCR_TOKEN}'
             DEPLOY_SHA='${{ github.event.workflow_run.head_sha }}'
