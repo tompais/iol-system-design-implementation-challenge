@@ -81,30 +81,37 @@ jobs:
           EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
           chmod 600 "$KEY_FILE"
           printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
+          # IMPORTANT: The heredoc uses quoted syntax (<< 'DEPLOY_SCRIPT') to prevent
+          # the GitHub Actions runner from interpolating ${} expressions locally.
+          # All variables needed inside the remote script (REPO_PATH, GITHUB_ACTOR,
+          # GHCR_TOKEN, DEPLOY_SHA) are passed explicitly via 'export ...' in the
+          # SSH command prefix below, where runner-side interpolation IS intended.
           ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "export REPO_PATH=$(printf '%q' "$REPO_PATH"); export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); bash -s" << DEPLOY_SCRIPT
+            "export REPO_PATH=$(printf '%q' "$REPO_PATH"); \
+             export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); \
+             export GHCR_TOKEN=$(printf '%q' "$GHCR_TOKEN"); \
+             export DEPLOY_SHA=$(printf '%q' "$DEPLOY_SHA"); \
+             bash -s" << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
 
-            : "\${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
-
-            GHCR_TOKEN='${GHCR_TOKEN}'
-            DEPLOY_SHA='${{ github.event.workflow_run.head_sha }}'
+            : "${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
 
             # Versión pinneada de Compose para garantizar reproducibilidad y verificación de integridad.
             REQUIRED_COMPOSE="2.36.0"
 
             # Detecta la arquitectura para seleccionar el binario correcto (x86_64 o ARM64).
-            ARCH=\$(uname -m)
-            case "\$ARCH" in
+            ARCH=$(uname -m)
+            case "$ARCH" in
               x86_64)  COMPOSE_ARCH="linux-x86_64" ;;
               aarch64) COMPOSE_ARCH="linux-aarch64" ;;
-              *) echo "Arquitectura no soportada: \$ARCH" >&2; exit 1 ;;
+              *) echo "Arquitectura no soportada: $ARCH" >&2; exit 1 ;;
             esac
 
             # Detecta el package manager (apt-get para Debian/Ubuntu, yum para Amazon Linux/RHEL).
@@ -123,9 +130,9 @@ jobs:
 
             # Instala Docker si no está presente en el EC2.
             if ! command -v docker &>/dev/null; then
-              \$PKG_UPDATE
-              \$PKG_INSTALL \$DOCKER_PKG
-              sudo usermod -aG docker "\$USER"
+              $PKG_UPDATE
+              $PKG_INSTALL $DOCKER_PKG
+              sudo usermod -aG docker "$USER"
             fi
 
             # Asegura que el servicio de Docker esté arrancado y habilitado,
@@ -140,45 +147,45 @@ jobs:
             # Instala el plugin de Docker Compose pinneado si no está disponible.
             if ! docker compose version &>/dev/null; then
               sudo mkdir -p /usr/local/lib/docker/cli-plugins
-              sudo curl -fSL "https://github.com/docker/compose/releases/download/v\${REQUIRED_COMPOSE}/docker-compose-\${COMPOSE_ARCH}" \
+              sudo curl -fSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}" \
                 -o /usr/local/lib/docker/cli-plugins/docker-compose
-              COMPOSE_SHA=\$(curl -fsSL "https://github.com/docker/compose/releases/download/v\${REQUIRED_COMPOSE}/docker-compose-\${COMPOSE_ARCH}.sha256" | awk '{print \$1}')
-              [ -n "\$COMPOSE_SHA" ] || { echo "No se pudo obtener el checksum de Compose" >&2; exit 1; }
-              echo "\$COMPOSE_SHA  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
+              COMPOSE_SHA=$(curl -fsSL "https://github.com/docker/compose/releases/download/v${REQUIRED_COMPOSE}/docker-compose-${COMPOSE_ARCH}.sha256" | awk '{print $1}')
+              [ -n "$COMPOSE_SHA" ] || { echo "No se pudo obtener el checksum de Compose" >&2; exit 1; }
+              echo "$COMPOSE_SHA  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
               sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
             fi
 
             # Crea el directorio de trabajo y descarga el compose.yaml pinneado al SHA del deploy.
             # No se necesita clonar el repo: la imagen viene de ghcr.io y compose.yaml es el único
             # archivo necesario para orquestar el contenedor en el EC2.
-            DEPLOY_DIR="\${REPO_PATH%/}"
-            case "\$DEPLOY_DIR" in
+            DEPLOY_DIR="${REPO_PATH%/}"
+            case "$DEPLOY_DIR" in
               "~"|"~/"*)
-                [ -n "\${HOME:-}" ] || { echo "HOME must be set when using ~ in REPO_PATH" >&2; exit 1; }
-                DEPLOY_DIR="\${HOME}\${DEPLOY_DIR#\~}"
+                [ -n "${HOME:-}" ] || { echo "HOME must be set when using ~ in REPO_PATH" >&2; exit 1; }
+                DEPLOY_DIR="${HOME}${DEPLOY_DIR#~}"
                 ;;
               "~"*)
-                echo "~user paths are not supported in REPO_PATH (got: '\$DEPLOY_DIR')" >&2; exit 1
+                echo "~user paths are not supported in REPO_PATH (got: '$DEPLOY_DIR')" >&2; exit 1
                 ;;
             esac
-            case "\$DEPLOY_DIR" in
+            case "$DEPLOY_DIR" in
               /*) ;;
-              *) echo "REPO_PATH must resolve to an absolute path (got: '\$DEPLOY_DIR')" >&2; exit 1 ;;
+              *) echo "REPO_PATH must resolve to an absolute path (got: '$DEPLOY_DIR')" >&2; exit 1 ;;
             esac
             # Limpia el directorio de deploy para evitar colisiones con archivos de despliegues
             # anteriores (por ejemplo, un git clone previo o un compose.yml/docker-compose.yml
             # residual que Compose podría leer junto al compose.yaml recién descargado).
             # ${DEPLOY_DIR:?} falla si la variable está vacía, protegiendo contra un rm -rf /.
-            rm -rf "\${DEPLOY_DIR:?}"
-            mkdir -p "\$DEPLOY_DIR"
-            curl -fsSL "https://raw.githubusercontent.com/tompais/iol-system-design-implementation-challenge/\${DEPLOY_SHA}/compose.yaml" \
-              -o "\$DEPLOY_DIR/compose.yaml"
-            echo "IMAGE_TAG=\${DEPLOY_SHA}" > "\$DEPLOY_DIR/.env"
-            cd "\$DEPLOY_DIR"
+            rm -rf "${DEPLOY_DIR:?}"
+            mkdir -p "$DEPLOY_DIR"
+            curl -fsSL "https://raw.githubusercontent.com/tompais/iol-system-design-implementation-challenge/${DEPLOY_SHA}/compose.yaml" \
+              -o "$DEPLOY_DIR/compose.yaml"
+            echo "IMAGE_TAG=${DEPLOY_SHA}" > "$DEPLOY_DIR/.env"
+            cd "$DEPLOY_DIR"
 
             # Autentica en GHCR para hacer pull de la imagen pre-construida en CI.
             # <<< evita crear un subproceso que exponga el token en ps; trap garantiza el logout.
-            sudo docker login ghcr.io -u "\$GITHUB_ACTOR" --password-stdin <<< "\$GHCR_TOKEN"
+            sudo docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GHCR_TOKEN"
             trap 'sudo docker logout ghcr.io 2>/dev/null || true' EXIT
 
             # La imagen fue construida y publicada en ghcr.io por el job docker del CI.
