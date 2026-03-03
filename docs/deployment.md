@@ -243,11 +243,34 @@ Configure these under **GitHub repo → Settings → Secrets and variables → A
 
 | Secret | Value |
 |--------|-------|
-| `EC2_HOST` | Public IP or DNS of the EC2 instance (e.g. `1.2.3.4`) |
+| `EC2_INSTANCE_ID` | EC2 instance ID (e.g. `i-0123456789abcdef0`) — find it in **EC2 → Instances → your instance → Instance ID**. This value never changes, even after stop/start. |
 | `EC2_USERNAME` | SSH username — `ec2-user` on Amazon Linux |
 | `EC2_SSH_KEY` | Full contents of the `.pem` private key file |
-| `EC2_HOST_FINGERPRINT` | SSH host key fingerprint of the EC2 instance (run `ssh-keyscan -t ed25519 <host>` to obtain a single known-hosts line) |
 | `EC2_REPO_PATH` | Absolute path on EC2 (e.g. `~/iol-system-design-implementation-challenge`) |
+| `AWS_ACCESS_KEY_ID` | Access key ID of an IAM user with `ec2:DescribeInstances` permission (see below) |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding IAM secret access key |
+| `AWS_REGION` | AWS region where the instance lives (e.g. `sa-east-1`) |
+
+> **Why `EC2_INSTANCE_ID` instead of `EC2_HOST`?** AWS reassigns a new public IP and DNS on every EC2 stop/start. Storing the public IP as a static secret means the CD pipeline breaks after every restart. The instance ID is immutable — the workflow resolves the current public DNS from it at deploy time via `aws ec2 describe-instances`, so no secret update is ever needed after a restart.
+
+#### Minimal IAM policy for the deploy user
+
+Create a dedicated IAM user (e.g. `github-cd-deploy`) with programmatic access only and attach the following inline policy. This grants the minimum permission required to resolve the instance's current public DNS:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ec2:DescribeInstances",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Generate an access key for this user and store the key ID and secret in the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` secrets above.
 
 ### Restart policy
 
