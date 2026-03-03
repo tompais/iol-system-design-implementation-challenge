@@ -185,13 +185,20 @@ jobs:
             sudo docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GHCR_TOKEN"
             trap 'sudo docker logout ghcr.io 2>/dev/null || true' EXIT
 
-            # La imagen fue construida y publicada en ghcr.io por el job docker del CI.
-            # Baja todo el stack anterior (app + observabilidad) para liberar puertos y aplicar
-            # cualquier cambio en compose.yaml. docker compose down es idempotente: no falla si
-            # no hay ningún stack corriendo.
-            sudo docker compose down --remove-orphans
-            # Pull de todas las imágenes y levanta todo el stack — app + servicios de observabilidad.
+            # Solo ejecuta "docker compose down" si hay servicios definidos; de lo contrario, no falla.
+            if sudo docker compose ps -q | grep -q .; then
+              sudo docker compose down --remove-orphans
+            else
+              echo "No existing Docker Compose stack to stop."
+            fi
+
+            # Pull de todos los servicios del stack para tener las imágenes actualizadas.
+            # La imagen de app viene de ghcr.io (publicada por CI); grafana-lgtm viene de Docker Hub.
             sudo docker compose pull
+
+            # Levanta el stack completo: app + grafana-lgtm.
+            # app depende de grafana-lgtm (depends_on), por lo que ambos deben estar corriendo.
+            # --remove-orphans elimina contenedores de servicios que ya no existen en compose.yaml.
             sudo docker compose up -d --remove-orphans
           DEPLOY_SCRIPT
           } | ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
