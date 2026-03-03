@@ -186,12 +186,13 @@ jobs:
             trap 'sudo docker logout ghcr.io 2>/dev/null || true' EXIT
 
             # La imagen fue construida y publicada en ghcr.io por el job docker del CI.
-            # Baja el stack anterior (libera el puerto 8080) antes de levantar el nuevo.
-            # || true garantiza que no falle si no había ningún stack corriendo (primer deploy).
-            sudo docker compose down --remove-orphans || true
-            # Solo hace pull y levanta — sin rebuild en el EC2.
-            sudo docker compose pull app
-            sudo docker compose up -d --remove-orphans --no-deps app
+            # Baja todo el stack anterior (app + observabilidad) para liberar puertos y aplicar
+            # cualquier cambio en compose.yaml. docker compose down es idempotente: no falla si
+            # no hay ningún stack corriendo.
+            sudo docker compose down --remove-orphans
+            # Pull de todas las imágenes y levanta todo el stack — app + servicios de observabilidad.
+            sudo docker compose pull
+            sudo docker compose up -d --remove-orphans
           DEPLOY_SCRIPT
           } | ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
               "${EC2_USERNAME}@${EC2_HOST}" \
