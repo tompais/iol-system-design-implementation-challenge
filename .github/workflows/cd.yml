@@ -89,16 +89,13 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > "$KEY_FILE"
           # IMPORTANT: The heredoc uses quoted syntax (<< 'DEPLOY_SCRIPT') to prevent
           # the GitHub Actions runner from interpolating ${} expressions locally.
-          # All variables needed inside the remote script (REPO_PATH, GITHUB_ACTOR,
-          # GHCR_TOKEN, DEPLOY_SHA) are passed explicitly via 'export ...' in the
+          # REPO_PATH, GITHUB_ACTOR, and DEPLOY_SHA are passed via 'export ...' in the
           # SSH command prefix below, where runner-side interpolation IS intended.
-          ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
-            "${EC2_USERNAME}@${EC2_HOST}" \
-            "export REPO_PATH=$(printf '%q' "$REPO_PATH"); \
-             export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); \
-             export GHCR_TOKEN=$(printf '%q' "$GHCR_TOKEN"); \
-             export DEPLOY_SHA=$(printf '%q' "$DEPLOY_SHA"); \
-             bash -s" << 'DEPLOY_SCRIPT'
+          # GHCR_TOKEN is injected via stdin (not the command line) to keep it off
+          # process listings on both the runner and the remote host.
+          {
+            printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
+            cat << 'DEPLOY_SCRIPT'
             set -euo pipefail 2>/dev/null || set -euo
 
             : "${REPO_PATH:?REPO_PATH is not set. Check EC2_REPO_PATH secret and SSH env export.}"
@@ -193,3 +190,9 @@ jobs:
             sudo docker compose pull app
             sudo docker compose up -d --no-deps app
           DEPLOY_SCRIPT
+          } | ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -i "$KEY_FILE" \
+              "${EC2_USERNAME}@${EC2_HOST}" \
+              "export REPO_PATH=$(printf '%q' "$REPO_PATH"); \
+               export GITHUB_ACTOR=$(printf '%q' "$GITHUB_ACTOR"); \
+               export DEPLOY_SHA=$(printf '%q' "$DEPLOY_SHA"); \
+               bash -s"
